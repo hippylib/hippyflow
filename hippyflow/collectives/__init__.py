@@ -1,1 +1,6 @@
 from .collectiveOperator import CollectiveOperator
+
+from .collective import NullCollective, MultipleSerialPDEsCollective, MultipleSamePartitioningPDEsCollective
+
+from .comm_utils import splitCommunicators, checkFunctionSpaceConsistentPartitioning, checkMeshConsistentPartitioning
+

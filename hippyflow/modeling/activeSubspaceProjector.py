@@ -6,6 +6,7 @@ from mpi4py import MPI
 import time
 
 from ..collectives.collectiveOperator import CollectiveOperator
+from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
 from ..utilities.plotting import *
@@ -79,7 +80,7 @@ class ActiveSubspaceProjector:
 		self.observable.setLinearizationPoint(x)
 
 
-	def construct_input_subspace(self):
+	def construct_input_subspace(self,prior_preconditioned = True):
 		t0 = time.time()
 		GN_Hessian = JTJ(self.J)
 		Average_GN_Hessian = CollectiveOperator(GN_Hessian, self.collective, mpi_op = 'avg')
@@ -95,10 +96,27 @@ class ActiveSubspaceProjector:
 
 		self.collective.bcast(Omega,root = 0)
 
-		self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+		if prior_preconditioned:
+			if hasattr(self.prior, "R"):
+				# collective_R = CollectiveOperator(self.prior.R,self.collective,mpi_op = 'avg')
+				# collective_Rsolver = CollectiveOperator(self.prior.Rsolver,self.collective,mpi_op = 'avg')
+				collective_R = self.prior.R
+				collective_Rsolver = self.prior.Rsolver
+			else:
+				raise
+				# Not sure what this case is, adapted from
+				# https://github.com/hippylib/hippylib/blob/master/hippylib/forward_uq/taylorApproximationQoi.py#L75
+				collective_R = CollectiveOperator(self.prior.Hlr,self.collective,mpi_op = 'avg')
+				collective_Rsolver = CollectiveOperator(self.prior.Hlr,self.collective,mpi_op = 'avg')
+
+			self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
+			 collective_R, collective_Rsolver, Omega,self.parameters['rank'],s=1)
+
+		else:
+			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print('Construction of input subspace took ',time.time() - t0,'s')
-			print('Input subspace eigenvalues = ',self.d_GN)
+			# print('Input subspace eigenvalues = ',self.d_GN)
 
 
 	def construct_output_subspace(self):
@@ -119,7 +137,7 @@ class ActiveSubspaceProjector:
 		self.d_NG, self.U_NG = doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print('Construction of output subspace took ',time.time() - t0,'s')
-			print('Output subspace eigenvalues = ',self.d_NG)
+			# print('Output subspace eigenvalues = ',self.d_NG)
 
 	def test_error_bounds(self,test_input = True, test_output = True, ranks = [None],cut_off = 1e-8):
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
