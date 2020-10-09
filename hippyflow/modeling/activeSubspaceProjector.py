@@ -4,6 +4,7 @@ import os
 from hippylib import *
 from mpi4py import MPI 
 import time
+from pympler import asizeof
 
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
@@ -16,7 +17,8 @@ def ActiveSubspaceParameterList():
 
 	"""
 	parameters = {}
-	parameters['sample_per_process'] 	= [100, 'Number of samples per process']
+	parameters['error_test_samples'] 	= [32, 'Number of samples per process']
+	parameters['error_test_samples'] 	= [100, 'Number of samples for error test']
 	parameters['rank'] 				 	= [20, 'Rank of subspace']
 	parameters['oversampling'] 		 	= [10, 'Oversampling parameter for randomized algorithms']
 	parameters['double_loop_samples']	= [10, 'Number of samples used in double loop MC approximation']
@@ -24,16 +26,39 @@ def ActiveSubspaceParameterList():
 
 	return ParameterList(parameters)
 
+
+class SummedListOperator:
+	'''
+	Assumes that list of operators all have the same dimensionality
+	'''
+	def __init__(self,operators,average = False):
+		assert type(operators) is list
+		self.operators = operators
+		self.average = average
+
+	def mult(self,x,y):
+		temp = dl.Vector(y)
+		for op in self.operators:
+			op.mult(x,y)
+			temp.axpy(1.,y)
+		y.zero()
+		if self.average:
+			y.axpy(1./float(len(self.operators)),temp)
+		else:
+			y.axpy(1.,temp)
+
+
+
 class ActiveSubspaceProjector:
 	"""
 	This class implements projectors based on globally averages GN Hessian and inside out GN Hessian
 	We have a forward mapping: m --> q(m)
-	And a forward map Jacobian: \nabla q(m)
+	And a forward map Jacobian:  math:: \nabla q(m)
 	Jacobian SVD: J = U S V'
 	Output active subspace: J'J = US^2U'
 	Input active subspace: JJ' = VS^2V'
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
+	def __init__(self,observable, prior, observable_kwargs = {}, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
 
 		self.observable = observable
 		self.prior = prior
@@ -47,12 +72,17 @@ class ActiveSubspaceProjector:
 		else:
 			self.collective = NullCollective()
 
-
 		self.parameters = parameters
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.observable.problem.Vh[0].mesh(), self.collective)
-		print('Consistent partitioning:', consistent_partitioning)
+		assert consistent_partitioning
+		if self.parameters['verbose']:
+			print('Consistent partitioning:', consistent_partitioning)
+
+		# Initialize many copies of Jacobian here
+
+		
 
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
@@ -66,6 +96,8 @@ class ActiveSubspaceProjector:
 
 		self.J = ObservableJacobian(self.observable)
 
+		self.test_operators()
+
 		self.d_GN = None
 		self.V_GN = None
 
@@ -78,6 +110,34 @@ class ActiveSubspaceProjector:
 		x = [self.u,self.m,None]
 		self.observable.solveFwd(self.u,x)
 		self.observable.setLinearizationPoint(x)
+
+	# def initialize_samples(self):
+
+	def test_operators(self):
+		GN_Hess = JTJ(self.J)
+		x = dl.Vector(self.observable.B.mpi_comm())
+		self.J.init_vector(x,1)
+		y = dl.Vector(self.observable.B.mpi_comm())
+		self.J.init_vector(y,1)
+		y.zero()
+		x.set_local(np.ones_like(x.get_local()))
+		x.apply('')
+		print('For one J only')
+		print('||x|| = ', x.norm('l2'))
+		print('||y|| = ', y.norm('l2'))
+		GN_Hess.mult(x,y)
+		print('||y|| = ', y.norm('l2'))
+		y.zero()
+
+		print('Now for 10 Js')
+		list_of_GNHs = [GN_Hess for i in range(10)]
+
+		summed_list_of_GNHs = SummedListOperator(list_of_GNHs)
+		print('||y|| = ', y.norm('l2'))
+		summed_list_of_GNHs.mult(x,y)
+		print('||y|| = ', y.norm('l2'))
+
+
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
@@ -98,20 +158,11 @@ class ActiveSubspaceProjector:
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
-				# collective_R = CollectiveOperator(self.prior.R,self.collective,mpi_op = 'avg')
-				# collective_Rsolver = CollectiveOperator(self.prior.Rsolver,self.collective,mpi_op = 'avg')
-				collective_R = self.prior.R
-				collective_Rsolver = self.prior.Rsolver
+				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
+			 		self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
 			else:
-				raise
-				# Not sure what this case is, adapted from
-				# https://github.com/hippylib/hippylib/blob/master/hippylib/forward_uq/taylorApproximationQoi.py#L75
-				collective_R = CollectiveOperator(self.prior.Hlr,self.collective,mpi_op = 'avg')
-				collective_Rsolver = CollectiveOperator(self.prior.Hlr,self.collective,mpi_op = 'avg')
-
-			self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
-			 collective_R, collective_Rsolver, Omega,self.parameters['rank'],s=1)
-
+				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
+			 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
@@ -165,9 +216,9 @@ class ActiveSubspaceProjector:
 			# Double loop MC error approximation
 			observable_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(observable_vector,dim = 0)
-			LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+			LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
 			LocalObservables.zero()
-			LocalParameters = MultiVector(self.m,self.parameters['sample_per_process'])
+			LocalParameters = MultiVector(self.m,self.parameters['error_test_samples'])
 			LocalParameters.zero()
 
 			for i in range(LocalObservables.nvec()):
@@ -180,8 +231,8 @@ class ActiveSubspaceProjector:
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 					print('Generating local observable ',i,' for input error test took',time.time() -t0, 's')
 
-			LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
-			Local_Reduced_Observable = MultiVector(observable_vector,self.parameters['sample_per_process'])
+			LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
+			Local_Reduced_Observable = MultiVector(observable_vector,self.parameters['error_test_samples'])
 
 			x_r = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(x_r,dim = 1)
@@ -262,7 +313,7 @@ class ActiveSubspaceProjector:
 			# Naive test on output space
 			observable_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(observable_vector,dim = 0)
-			LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+			LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
 			LocalObservables.zero()
 			for i in range(LocalObservables.nvec()):
 				t0 = time.time()
@@ -274,7 +325,7 @@ class ActiveSubspaceProjector:
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 					print('Generating local observable ',i, ' for output error test')
 
-			LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+			LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
 			projection_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(projection_vector,dim = 0)
 
