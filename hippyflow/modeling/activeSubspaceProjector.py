@@ -4,7 +4,7 @@ import os
 from hippylib import *
 from mpi4py import MPI 
 import time
-from pympler import asizeof
+
 
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
@@ -17,12 +17,18 @@ def ActiveSubspaceParameterList():
 
 	"""
 	parameters = {}
-	parameters['error_test_samples'] 	= [32, 'Number of samples per process']
-	parameters['error_test_samples'] 	= [100, 'Number of samples for error test']
-	parameters['rank'] 				 	= [20, 'Rank of subspace']
-	parameters['oversampling'] 		 	= [10, 'Oversampling parameter for randomized algorithms']
-	parameters['double_loop_samples']	= [10, 'Number of samples used in double loop MC approximation']
-	parameters['verbose']				= [True, 'Boolean for printing']
+	parameters['samples_per_process'] 		= [32, 'Number of samples per process']
+	parameters['error_test_samples'] 		= [100, 'Number of samples for error test']
+	parameters['rank'] 				 		= [20, 'Rank of subspace']
+	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
+	parameters['double_loop_samples']		= [10, 'Number of samples used in double loop MC approximation']
+	parameters['verbose']					= [True, 'Boolean for printing']
+
+	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
+	parameters['observable_kwargs'] 		= [{},'kwargs used when instantiating multiple local instances of observables']
+
+	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
+	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
 	return ParameterList(parameters)
 
@@ -31,13 +37,20 @@ class SummedListOperator:
 	'''
 	Assumes that list of operators all have the same dimensionality
 	'''
-	def __init__(self,operators,average = False):
+	def __init__(self,operators,communicator = None,average = True):
 		assert type(operators) is list
 		self.operators = operators
 		self.average = average
+		if communicator is None:
+			self.temp = None
+		else:
+			self.temp = dl.Vector(communicator)
 
 	def mult(self,x,y):
-		temp = dl.Vector(y)
+		if self.temp is None:
+			temp = dl.Vector(y)
+		else:
+			temp = self.temp
 		for op in self.operators:
 			op.mult(x,y)
 			temp.axpy(1.,y)
@@ -58,43 +71,52 @@ class ActiveSubspaceProjector:
 	Output active subspace: J'J = US^2U'
 	Input active subspace: JJ' = VS^2V'
 	"""
-	def __init__(self,observable, prior, observable_kwargs = {}, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
-
+	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
+		self.parameters = parameters
+		if self.parameters['verbose']:
+			print(80*'#')
+			print('Active Subspace object being created'.center(80))
 		self.observable = observable
 		self.prior = prior
+
+
 		if mesh_constructor_comm is not None:
 			self.mesh_constructor_comm = mesh_constructor_comm
 		else:
-			self.mesh_constructor_comm = dl.MPI.COMM_WORLD
+			self.mesh_constructor_comm = self.observable.mpi_comm()
 
 		if collective is not None:
 			self.collective = collective
 		else:
 			self.collective = NullCollective()
 
-		self.parameters = parameters
+		
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.observable.problem.Vh[0].mesh(), self.collective)
 		assert consistent_partitioning
 		if self.parameters['verbose']:
-			print('Consistent partitioning:', consistent_partitioning)
+			print(('Consistent partitioning:'+str(consistent_partitioning)).center(80))
 
-		# Initialize many copies of Jacobian here
+		# Initialize many copies of observables here
+		self.observables = [self.observable]
 
-		
+		if self.parameters['samples_per_process'] > 1:
+			assert self.parameters['observable_constructor'] is not None
+			for i in range(self.parameters['samples_per_process']-1):
+				new_observable = self.parameters['observable_constructor'](self.observable.problem.Vh[0].mesh(),**self.parameters['observable_kwargs'])
+				self.observables.append(new_observable)
 
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-		parRandom.normal(1,self.noise)
-
-		self.u = self.observable.generate_vector(STATE)
-		self.m = self.observable.generate_vector(PARAMETER)
+			
+		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
+		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		# Draw a new sample and set linearization point.
-		self.new_sample()
+		self.initialize_samples()
 
-		self.J = ObservableJacobian(self.observable)
+		self.Js = [ObservableJacobian(observable) for observable in self.observables]
 
 		self.test_operators()
 
@@ -103,36 +125,47 @@ class ActiveSubspaceProjector:
 
 		self.d_NG = None
 		self.U_NG = None
+		exit()
 
-	def new_sample(self):
-		# set linearization point
-		self.prior.sample(self.noise,self.m)
-		x = [self.u,self.m,None]
-		self.observable.solveFwd(self.u,x)
-		self.observable.setLinearizationPoint(x)
 
-	# def initialize_samples(self):
+	def initialize_samples(self):
+		for u,m,observable in zip(self.us,self.ms,self.observables):
+			self.noise.zero()
+			parRandom.normal(1,self.noise)
+			# set linearization point
+			self.prior.sample(self.noise,m)
+			x = [u,m,None]
+			observable.solveFwd(u,x)
+			observable.setLinearizationPoint(x)
+		if self.parameters['verbose']:
+			try:
+				from pympler import asizeof
+				print(('Size of one observable is '+str(asizeof.asizeof(self.observables[0])/1e6)+' MB').center(80))
+				print(('Size of '+str(self.parameters['samples_per_process'])+' observable is '+str(asizeof.asizeof(self.observables)/1e6)+' MB').center(80))
+			except:
+				print('Install pympler and run again: pip install pympler'.center(80))
+
+
 
 	def test_operators(self):
-		GN_Hess = JTJ(self.J)
+		GN_Hesses = [JTJ(J) for J in self.Js]
 		x = dl.Vector(self.observable.B.mpi_comm())
-		self.J.init_vector(x,1)
+		self.Js[0].init_vector(x,1)
 		y = dl.Vector(self.observable.B.mpi_comm())
-		self.J.init_vector(y,1)
+		self.Js[0].init_vector(y,1)
 		y.zero()
 		x.set_local(np.ones_like(x.get_local()))
 		x.apply('')
 		print('For one J only')
 		print('||x|| = ', x.norm('l2'))
 		print('||y|| = ', y.norm('l2'))
-		GN_Hess.mult(x,y)
+		GN_Hesses[0].mult(x,y)
 		print('||y|| = ', y.norm('l2'))
 		y.zero()
 
 		print('Now for 10 Js')
-		list_of_GNHs = [GN_Hess for i in range(10)]
-
-		summed_list_of_GNHs = SummedListOperator(list_of_GNHs)
+		t0 = time.time()
+		summed_list_of_GNHs = SummedListOperator(GN_Hesses,average = False)
 		print('||y|| = ', y.norm('l2'))
 		summed_list_of_GNHs.mult(x,y)
 		print('||y|| = ', y.norm('l2'))
@@ -141,9 +174,16 @@ class ActiveSubspaceProjector:
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
+		if self.parameters['verbose']:
+			print(80*'#')
+			print('Building derivative informed input subspace'.center(80))
+
 		t0 = time.time()
-		GN_Hessian = JTJ(self.J)
-		Average_GN_Hessian = CollectiveOperator(GN_Hessian, self.collective, mpi_op = 'avg')
+		GH_Hessians = [JTJ(J) for J in self.Js]
+		Local_Average_GN_Hessian = SummedListOperator(GN_Hesses,average = True)
+		# This averaging assumes every process has an equal number of samples
+		# Otherwise it will bias towards a process with the fewest samples
+		Average_GN_Hessian = CollectiveOperator(Local_Average_GN_Hessian, self.collective, mpi_op = 'avg')
 
 		x_GN = dl.Vector(self.mesh_constructor_comm)
 		GN_Hessian.init_vector(x_GN)
@@ -166,11 +206,22 @@ class ActiveSubspaceProjector:
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
-			print('Construction of input subspace took ',time.time() - t0,'s')
-			# print('Input subspace eigenvalues = ',self.d_GN)
+			print(('Input subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
+		if True and MPI.COMM_WORLD.rank == 0:
+			np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
+			np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
+
+			out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+			_ = spectrum_plot(self.d_GN,\
+				axis_label = ['i',r'$\lambda_i$',\
+				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
 
 
 	def construct_output_subspace(self):
+		if self.parameters['verbose']:
+			print(80*'#')
+			print('Building derivative informed output subspace'.center(80))
 		t0 = time.time()
 		NG_Hessian = JJT(self.J)
 		Average_NG_Hessian = CollectiveOperator(NG_Hessian, self.collective, mpi_op = 'avg')
@@ -187,8 +238,16 @@ class ActiveSubspaceProjector:
 		self.collective.bcast(Omega,root = 0)
 		self.d_NG, self.U_NG = doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
-			print('Construction of output subspace took ',time.time() - t0,'s')
-			# print('Output subspace eigenvalues = ',self.d_NG)
+			print(('Output subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
+		if True and MPI.COMM_WORLD.rank == 0:
+			np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
+			np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
+
+			out_name = self.parameters['output_directory']+'AS_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+			_ = spectrum_plot(self.d_NG,\
+				axis_label = ['i',r'$\lambda_i$',\
+				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
 
 	def test_error_bounds(self,test_input = True, test_output = True, ranks = [None],cut_off = 1e-8):
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
@@ -225,7 +284,7 @@ class ActiveSubspaceProjector:
 				t0 = time.time()
 				parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,LocalParameters[i])
-				x = [self.u,LocalParameters[i],None]
+				x = [self.us[0],LocalParameters[i],None]
 				self.observable.setLinearizationPoint(x)
 				LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
@@ -277,7 +336,7 @@ class ActiveSubspaceProjector:
 						self.prior.sample(self.noise,y)
 						InputProjectorOperator.mult(y,y_r)
 						y.axpy(-1., y_r)
-						x = [self.u, x_r + y, None]
+						x = [self.us[0], x_r + y, None]
 						self.observable.setLinearizationPoint(x)
 						LocalErrors[i].axpy(-1./float(self.parameters['double_loop_samples']),self.observable.eval(x_r + y))
 						if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
@@ -319,7 +378,7 @@ class ActiveSubspaceProjector:
 				t0 = time.time()
 				parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,self.m)
-				x = [self.u,self.m,None]
+				x = [self.us[0],self.ms[0],None]
 				self.observable.setLinearizationPoint(x)
 				LocalObservables[i].axpy(1.,self.observable.eval(self.m))
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
@@ -339,8 +398,6 @@ class ActiveSubspaceProjector:
 					d_NG = self.d_NG[0:rank]
 					for i in range(rank):
 						U_NG[i].axpy(1.,self.U_NG[i])
-						# U_NG[i].set_local(self.U_NG[i].get_local())
-						# U_NG[i].apply('')
 				output_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
 				OutputProjectorOperator = LowRankOperator(np.ones_like(d_NG),U_NG,output_init_vector_lambda)
 			
