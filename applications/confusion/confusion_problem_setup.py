@@ -36,8 +36,10 @@ parser.add_argument('-save_data',dest = 'save_data',\
 parser.add_argument('-save_pod',dest = 'save_pod',\
 					required= False,default = 0,help='boolean for saving of POD projectors',type = int)
 parser.add_argument('-save_as',dest = 'save_as',\
-					required= False,default = 1,help='boolean for saving of active subspace projectors',type = int)
-parser.add_argument('-save_two_solutions',dest = 'save_two_solutions',\
+					required= False,default = 0,help='boolean for saving of active subspace projectors',type = int)
+parser.add_argument('-save_kle',dest = 'save_kle',\
+					required= False,default = 1,help='boolean for saving of KLE projectors',type = int)
+parser.add_argument('-save_two_states',dest = 'save_two_states',\
 					required= False,default = 0,help='boolean for savign solution at mean and draw',type = int)
 
 args = parser.parse_args()
@@ -80,10 +82,26 @@ if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
+# Karhunen-Lo\`{e}ve Expansion
+
+if args.save_kle:
+
+	KLE_parameters = KLEParameterList()
+	KLE_parameters['output_directory'] = output_directory
+	KLE_parameters['plot_label_suffix'] = r' $\gamma = '+str(args.gamma)+',\enskip \delta = '+str(args.delta)+'$'
+	KLE = KLEProjector(prior,\
+		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = KLE_parameters)
+
+	KLE.construct_input_subspace()
+
+
+# Proper Orthogonal Decomposition
 if args.save_data or args.save_pod:
 	print('POD object being created')
 	POD_parameters = PODParameterList()
 	POD_parameters['data_per_process']	 = args.data_per_process
+	POD_parameters['output_directory'] = output_directory
+	POD_parameters['plot_label_suffix'] = r' $\gamma = '+str(args.gamma)+',\enskip \delta = '+str(args.delta)+'$'
 	POD = PODProjector(observable,prior,\
 		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = POD_parameters)
 
@@ -98,57 +116,11 @@ if args.save_pod:
 	print('Building POD projector')
 	POD.parameters['rank'] = args.pod_rank
 	POD.construct_subspace()
-	if int(my_rank) == 0:
-		np.save(output_directory+'POD_projector',mv_to_dense(POD.U_MV))
-		np.save(output_directory+'POD_d',POD.d)
 
-		out_name = output_directory+'POD_eigenvalues_'+str(args.pod_rank)+'.pdf'
-		_ = spectrum_plot(POD.d,\
-			axis_label = ['i',r'$\lambda_i$',r'Eigenvalues of $\mathbb{E}_{\nu}[qq^T]$'], out_name = out_name)
-		print('POD.d = ',POD.d)
-		with open(output_directory+'pod_d.txt','w') as my_file:
-			my_file.write(str(POD.d))
-
-			
-
-
-
-
-
-# Move this all into the POD class as a method
-# # Solve the problem at the mean and save the mean field and velocity to file
-# if args.save_two_solutions:
-# 	# Solve for u at the mean
-# 	m_mean = prior.mean
-# 	print('||m_mean|| = ',m_mean.norm('l2'))
-# 	m_mean_pvd = dl.File(save_states_dir+'m_mean.pvd')
-# 	m_mean_pvd << vector2Function(m_mean,Vh[PARAMETER])
-
-# 	u_at_mean = observable.problem.generate_state()
-# 	observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
-
-# 	print('||v_at_mean|| = ',u_at_mean.norm('l2'))
-# 	v_at_mean_pvd = dl.File(save_states_dir+'v_at_mean.pvd')
-# 	v_at_mean_pvd << vector2Function(u_at_mean,Vh[STATE])
-
-# 	# Sample from prior:
-# 	noise = dl.Vector()
-# 	prior.init_vector(noise,"noise")
-# 	parRandom.normal(1,noise)
-# 	m_sample = observable.generate_vector(PARAMETER)
-# 	prior.sample(noise,m_sample)
-
-# 	print('||m_sample|| = ',m_sample.norm('l2'))
-# 	m_sample_pvd = dl.File(save_states_dir+'m_sample.pvd')
-# 	m_sample_pvd << vector2Function(m_sample,Vh[PARAMETER])
-
-# 	u_at_sample = observable.problem.generate_state()
-# 	observable.problem.solveFwd(u_at_sample,[u_at_sample,m_sample,None])
-
-# 	print('||v_at_sample|| = ',u_at_sample.norm('l2'))
-# 	v_at_sample_pvd = dl.File(save_states_dir+'v_at_sample.pvd')
-# 	v_at_sample_pvd << vector2Function(u_at_sample,Vh[STATE])
-
+if args.save_two_states:
+	print(80*'#')
+	print('Saving two states')
+	POD.two_state_solution()
 
 
 

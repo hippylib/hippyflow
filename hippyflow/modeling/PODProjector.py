@@ -2,11 +2,13 @@ import dolfin as dl
 import numpy as np
 import time
 from hippylib import *
+from mpi4py import MPI 
 import os
 
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
+from ..utilities.plotting import *
 
 def PODParameterList():
 	"""
@@ -17,7 +19,10 @@ def PODParameterList():
 	parameters['rank'] 				 = [20, 'Rank of POD subspace']
 	parameters['oversampling'] 		 = [10, 'Oversampling parameter for randomized algorithms']
 	parameters['data_per_process']	 = [250,'Total number of testing and training data to be constructed']
-	parameters['verbose']			 = [False,'Boolean for prints']
+	parameters['verbose']			 = [True,'Boolean for prints']
+
+	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
+	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
 	return ParameterList(parameters)
 
@@ -34,7 +39,7 @@ class PODProjector:
 		if mesh_constructor_comm is not None:
 			self.mesh_constructor_comm = mesh_constructor_comm
 		else:
-			self.mesh_constructor_comm = dl.MPI.COMM_WORLD
+			self.mesh_constructor_comm = self.observable.mpi_comm()
 
 		if collective is not None:
 			self.collective = collective
@@ -104,11 +109,12 @@ class PODProjector:
 			local_qs = np.concatenate((local_qs,np.expand_dims(self.observable.eval(self.m).get_local(),0)))
 			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
 			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-			print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
+			if self.parameters['verbose']:
+				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
 
 
 	def construct_subspace(self):
-		t0 = 0
+		t0 = time.time()
 		self.solve_at_mean()
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
@@ -116,7 +122,8 @@ class PODProjector:
 		LocalObservables.zero()
 		#Read data from file and build subspace option
 		for i in range(LocalObservables.nvec()):
-			print('Starting observable generation for draw ',i)
+			if self.parameters['verbose']:
+				print('Starting observable generation for draw ',i)
 			observable_vector.zero()
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
@@ -147,7 +154,14 @@ class PODProjector:
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):
 			print('Construction of POD subspace took ', time.time() - t0,'s')
 
-		# print(self.d)
+		if True and MPI.COMM_WORLD.rank == 0:
+			np.save(self.parameters['output_directory']+'POD_projector',mv_to_dense(self.U_MV))
+			np.save(self.parameters['output_directory']+'POD_d',self.d)
+
+			out_name = self.parameters['output_directory']+'POD_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+			_ = spectrum_plot(self.d,\
+				axis_label = ['i',r'$\lambda_i$',\
+				r'Eigenvalues of $\mathbb{E}_{\nu}[qq^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
 	def test_error_bounds(self,ranks = [None],cut_off = 1e-10):
@@ -225,11 +239,43 @@ class PODProjector:
 
 		return global_avg_rel_errors
 
-	# def save_asnp(filename = 'POD_basis'):
-	# 	if int(dl.MPI.COMM_WORLD.rank) == 0:
-	# 		print('Just on one process, we are saving')
-	# 		np.save(mv_to_dense(self.U_MV),filename)
-	# 		print('Save was successful')
+
+	def two_state_solution(self):
+		# Solve the problem at the mean and save the mean field and velocity to file
+		# Solve for u at the mean
+		save_states_dir = self.parameters['output_directory']+'two_states/'
+		os.makedirs(save_states_dir,exist_ok = True)
+		m_mean = self.prior.mean
+		if self.parameters['verbose']:
+			print('||m_mean|| = ',m_mean.norm('l2'))
+		m_mean_pvd = dl.File(save_states_dir+'m_mean.pvd')
+		m_mean_pvd << vector2Function(m_mean,self.observable.problem.Vh[PARAMETER])
+
+		u_at_mean = self.observable.problem.generate_state()
+		self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+
+		if self.parameters['verbose']:
+			print('||v_at_mean|| = ',u_at_mean.norm('l2'))
+		v_at_mean_pvd = dl.File(save_states_dir+'v_at_mean.pvd')
+		v_at_mean_pvd << vector2Function(u_at_mean,self.observable.problem.Vh[STATE])
+
+		# Sample from prior:
+		parRandom.normal(1,self.noise)
+		m_sample = self.observable.generate_vector(PARAMETER)
+		self.prior.sample(self.noise,m_sample)
+
+		if self.parameters['verbose']:
+			print('||m_sample|| = ',m_sample.norm('l2'))
+		m_sample_pvd = dl.File(save_states_dir+'m_sample.pvd')
+		m_sample_pvd << vector2Function(m_sample,self.observable.problem.Vh[PARAMETER])
+
+		u_at_sample = self.observable.problem.generate_state()
+		self.observable.problem.solveFwd(u_at_sample,[u_at_sample,m_sample,None])
+
+		if self.parameters['verbose']:
+			print('||v_at_sample|| = ',u_at_sample.norm('l2'))
+		v_at_sample_pvd = dl.File(save_states_dir+'v_at_sample.pvd')
+		v_at_sample_pvd << vector2Function(u_at_sample,self.observable.problem.Vh[STATE])
 
 
 
