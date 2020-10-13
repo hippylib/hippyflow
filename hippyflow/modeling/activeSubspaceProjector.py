@@ -17,11 +17,11 @@ def ActiveSubspaceParameterList():
 
 	"""
 	parameters = {}
-	parameters['samples_per_process'] 		= [32, 'Number of samples per process']
-	parameters['error_test_samples'] 		= [100, 'Number of samples for error test']
-	parameters['rank'] 				 		= [20, 'Rank of subspace']
+	parameters['samples_per_process'] 		= [64, 'Number of samples per process']
+	parameters['error_test_samples'] 		= [50, 'Number of samples for error test']
+	parameters['rank'] 				 		= [10, 'Rank of subspace']
 	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
-	parameters['double_loop_samples']		= [10, 'Number of samples used in double loop MC approximation']
+	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
 	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
@@ -118,14 +118,12 @@ class ActiveSubspaceProjector:
 
 		self.Js = [ObservableJacobian(observable) for observable in self.observables]
 
-		self.test_operators()
-
 		self.d_GN = None
 		self.V_GN = None
+		self.prior_preconditioned = None
 
 		self.d_NG = None
 		self.U_NG = None
-		exit()
 
 
 	def initialize_samples(self):
@@ -146,47 +144,21 @@ class ActiveSubspaceProjector:
 				print('Install pympler and run again: pip install pympler'.center(80))
 
 
-
-	def test_operators(self):
-		GN_Hesses = [JTJ(J) for J in self.Js]
-		x = dl.Vector(self.observable.B.mpi_comm())
-		self.Js[0].init_vector(x,1)
-		y = dl.Vector(self.observable.B.mpi_comm())
-		self.Js[0].init_vector(y,1)
-		y.zero()
-		x.set_local(np.ones_like(x.get_local()))
-		x.apply('')
-		print('For one J only')
-		print('||x|| = ', x.norm('l2'))
-		print('||y|| = ', y.norm('l2'))
-		GN_Hesses[0].mult(x,y)
-		print('||y|| = ', y.norm('l2'))
-		y.zero()
-
-		print('Now for 10 Js')
-		t0 = time.time()
-		summed_list_of_GNHs = SummedListOperator(GN_Hesses,average = False)
-		print('||y|| = ', y.norm('l2'))
-		summed_list_of_GNHs.mult(x,y)
-		print('||y|| = ', y.norm('l2'))
-
-
-
-
 	def construct_input_subspace(self,prior_preconditioned = True):
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed input subspace'.center(80))
+		
 
 		t0 = time.time()
-		GH_Hessians = [JTJ(J) for J in self.Js]
-		Local_Average_GN_Hessian = SummedListOperator(GN_Hesses,average = True)
+		GN_Hessians = [JTJ(J) for J in self.Js]
+		Local_Average_GN_Hessian = SummedListOperator(GN_Hessians,average = True)
 		# This averaging assumes every process has an equal number of samples
 		# Otherwise it will bias towards a process with the fewest samples
 		Average_GN_Hessian = CollectiveOperator(Local_Average_GN_Hessian, self.collective, mpi_op = 'avg')
 
 		x_GN = dl.Vector(self.mesh_constructor_comm)
-		GN_Hessian.init_vector(x_GN)
+		GN_Hessians[0].init_vector(x_GN)
 		Omega = MultiVector(x_GN,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
@@ -205,6 +177,7 @@ class ActiveSubspaceProjector:
 			 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+		self.prior_preconditioned = prior_preconditioned
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print(('Input subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
 		if True and MPI.COMM_WORLD.rank == 0:
@@ -223,11 +196,14 @@ class ActiveSubspaceProjector:
 			print(80*'#')
 			print('Building derivative informed output subspace'.center(80))
 		t0 = time.time()
-		NG_Hessian = JJT(self.J)
-		Average_NG_Hessian = CollectiveOperator(NG_Hessian, self.collective, mpi_op = 'avg')
+		NG_Hessians = [JJT(J) for J in self.Js]
+		Local_Average_NG_Hessian = SummedListOperator(NG_Hessians,average = True)
+		# This averaging assumes every process has an equal number of samples
+		# Otherwise it will bias towards a process with the fewest samples
+		Average_NG_Hessian = CollectiveOperator(Local_Average_NG_Hessian, self.collective, mpi_op = 'avg')
 
 		x_NG = dl.Vector(self.mesh_constructor_comm)
-		NG_Hessian.init_vector(x_NG)
+		NG_Hessians[0].init_vector(x_NG)
 		Omega = MultiVector(x_NG,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
@@ -254,6 +230,9 @@ class ActiveSubspaceProjector:
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
 		if test_input:
+			# Neither test currently makes any sense when the projectors are covariance orthogonal.
+			assert self.prior_preconditioned == False, 'Input Error tests not implemented for prior preconditioned subspace'
+			# Simple projection test
 			if self.d_GN is None:
 				if self.mesh_constructor_comm.rank == 0:
 					print('Constructing input subspace')
@@ -268,88 +247,164 @@ class ActiveSubspaceProjector:
 					print('Input subspace already computed proceeding with error tests')
 			# truncate eigenvalues for numerical stability
 			numericalrank = np.where(self.d_GN > cut_off)[-1][-1] + 1 # due to 0 indexing
+			ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]# due to inclusion
+			global_avg_rel_errors_output = np.ones_like(ranks,dtype = np.float64)
 
-			ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]
-			global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
-
-			# Double loop MC error approximation
-			observable_vector = dl.Vector(self.mesh_constructor_comm)
-			self.observable.init_vector(observable_vector,dim = 0)
-			LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
-			LocalObservables.zero()
-			LocalParameters = MultiVector(self.m,self.parameters['error_test_samples'])
+			# Naive test on output space
+			LocalParameters = MultiVector(self.ms[0],self.parameters['error_test_samples'])
 			LocalParameters.zero()
-
-			for i in range(LocalObservables.nvec()):
+			# Generate samples
+			for i in range(self.parameters['error_test_samples']):
 				t0 = time.time()
 				parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,LocalParameters[i])
-				x = [self.us[0],LocalParameters[i],None]
-				self.observable.setLinearizationPoint(x)
-				LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
-				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-					print('Generating local observable ',i,' for input error test took',time.time() -t0, 's')
 
-			LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
-			Local_Reduced_Observable = MultiVector(observable_vector,self.parameters['error_test_samples'])
-
-			x_r = dl.Vector(self.mesh_constructor_comm)
-			self.observable.init_vector(x_r,dim = 1)
-			y = dl.Vector(self.mesh_constructor_comm)
-			self.observable.init_vector(y,dim = 1)
-			y_r = dl.Vector(self.mesh_constructor_comm)
-			self.observable.init_vector(y_r,dim = 1)
+			LocalErrors = MultiVector(self.ms[0],self.parameters['error_test_samples'])
+			projection_vector = self.observable.generate_vector(PARAMETER) 
 
 			for rank_index,rank in enumerate(ranks):
-				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-					print('Beginning double loop MC for rank', rank)
 				LocalErrors.zero()
-				Local_Reduced_Observable.zero()
 				if rank is None:
 					V_GN = self.V_GN
 					d_GN = self.d_GN
 				else:
 					V_GN = MultiVector(self.V_GN[0],rank)
-					V_GN.zero()
 					d_GN = self.d_GN[0:rank]
 					for i in range(rank):
 						V_GN[i].axpy(1.,self.V_GN[i])
-						# V_GN[i].set_local(self.V_GN[i].get_local())
-						# V_GN[i].apply('')
 				input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
 				InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
-				print('Constructed projection operator for rank ',rank)
+			
 				rel_errors = np.zeros(LocalErrors.nvec())
-
 				for i in range(LocalErrors.nvec()):
-					if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-						print('Beginning outer loop i = ',i)
-					LocalErrors[i].axpy(1.,LocalObservables[i])
+					LocalErrors[i].axpy(1.,LocalParameters[i])
 					denominator = LocalErrors[i].norm('l2')
-					x_r.zero()
-					InputProjectorOperator.mult(LocalParameters[i],x_r)
-					for j in range(self.parameters['double_loop_samples']):
-						t0 = time.time()
-						y.zero()
-						y_r.zero()
-						parRandom.normal(1,self.noise)
-						self.prior.sample(self.noise,y)
-						InputProjectorOperator.mult(y,y_r)
-						y.axpy(-1., y_r)
-						x = [self.us[0], x_r + y, None]
-						self.observable.setLinearizationPoint(x)
-						LocalErrors[i].axpy(-1./float(self.parameters['double_loop_samples']),self.observable.eval(x_r + y))
-						if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-							print('Inner loop i,j = ',(i,j), ' took ',time.time() - t0, 's')
+					projection_vector.zero()
+					InputProjectorOperator.mult(LocalErrors[i],projection_vector)
+					LocalErrors[i].axpy(-1.,projection_vector)
 					numerator = LocalErrors[i].norm('l2')
 					rel_errors[i] = numerator/denominator
 
 				avg_rel_error = np.mean(rel_errors)
-				print('avg_rel_error = ',avg_rel_error)
-
-				global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+				global_avg_rel_errors_output[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
 				if self.mesh_constructor_comm.rank == 0:
-					print('Global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
+					print('Naive global average relative error input = ',global_avg_rel_errors_output[rank_index],' for rank ',rank)
+
+			# Double Loop MC Error test does not work when prior preconditioning is used.
+			# This will be fixed soon.
+			if True:
+				if self.d_GN is None:
+					if self.mesh_constructor_comm.rank == 0:
+						print('Constructing input subspace')
+					self.construct_input_subspace()
+				elif len(self.d_GN)<ranks[-1]:
+					if self.mesh_constructor_comm.rank == 0:
+						print('Constructing input subspace because larger rank needed.')
+						self.parameters['rank'] = ranks[-1]
+					self.construct_input_subspace()
+				else: 
+					if self.mesh_constructor_comm.rank == 0:
+						print('Input subspace already computed proceeding with error tests')
+				# truncate eigenvalues for numerical stability
+				numericalrank = np.where(self.d_GN > cut_off)[-1][-1] + 1 # due to 0 indexing
+				if numericalrank < ranks[-1]:
+					ranks = ranks+[numericalrank]
+				else:
+					ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]
+				global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
+
+				# Double loop MC error approximation
+				# Instantiate input and output data arrays
+				observable_vector = dl.Vector(self.mesh_constructor_comm)
+				self.observable.init_vector(observable_vector,dim = 0)
+				LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
+				LocalObservables.zero()
+				LocalParameters = MultiVector(self.ms[0],self.parameters['error_test_samples'])
+				LocalParameters.zero()
+				# Generate samples
+				for i in range(self.parameters['error_test_samples']):
+					t0 = time.time()
+					parRandom.normal(1,self.noise)
+					self.prior.sample(self.noise,LocalParameters[i])
+					LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i],setLinearizationPoint = True))
+					if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+						print('Generating local observable ',i,' for input error test took',time.time() -t0, 's')
+
+				# Instantiate array for errors
+				LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
+
+				m_r = dl.Vector(self.mesh_constructor_comm)
+				self.observable.init_vector(m_r,dim = 1)
+				y = dl.Vector(self.mesh_constructor_comm)
+				self.observable.init_vector(y,dim = 1)
+				y_r = dl.Vector(self.mesh_constructor_comm)
+				self.observable.init_vector(y_r,dim = 1)
+
+				for rank_index,rank in enumerate(ranks):
+					if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+						print('Beginning double loop MC for rank', rank)
+					LocalErrors.zero()
+
+					if rank is None:
+						V_GN = self.V_GN
+						d_GN = self.d_GN
+					else:
+						V_GN = MultiVector(self.V_GN[0],rank)
+						V_GN.zero()
+						d_GN = self.d_GN[0:rank]
+						for i in range(rank):
+							V_GN[i].axpy(1.,self.V_GN[i])
+					input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
+					InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
+					print('Constructed projection operator for rank ',rank)
+					rel_errors = np.zeros(LocalErrors.nvec())
+
+					for i in range(LocalErrors.nvec()):
+						if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+							print('Beginning outer loop i = ',i)
+						LocalErrors[i].axpy(1.,LocalObservables[i])
+						denominator = LocalErrors[i].norm('l2')
+						m_r.zero()
+						InputProjectorOperator.mult(LocalParameters[i],m_r)
+						for j in range(self.parameters['double_loop_samples']):
+							# Approximation of conditional expectation of qoi
+							discarded_samples = 0
+							t0 = time.time()
+							y.zero()
+							y_r.zero()
+							parRandom.normal(1,self.noise)
+							self.prior.sample(self.noise,y)
+							InputProjectorOperator.mult(y,y_r)
+							y.axpy(-1., y_r)
+							try:
+								LocalErrors[i].axpy(-1./float(self.parameters['double_loop_samples']),self.observable.eval(m_r + y,setLinearizationPoint = True))
+							except:
+								print('Issue solving PDE at truncated parameter (may be due to smoothness), discarding'.center(80))
+								discarded_samples +=1
+
+							if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+								print(('Inner loop i,j = '+str((i,j))+' took '+str(time.time() - t0)+'s').center(80))
+								print(('Discarded samples = '+str(discarded_samples)).center(80))
+						# Rescale to account for discarded samples
+						if discarded_samples > 0:
+							rescale_factor = float(self.parameters['double_loop_samples'])/(float(self.parameters['double_loop_samples']) - float(discarded_samples))
+							LocalErrors[i] *= rescale_factor
+
+						numerator = LocalErrors[i].norm('l2')
+						rel_errors[i] = numerator/denominator
+						if numerator > denominator:
+							for k in range(10):
+								print(80*'#')
+								print('Issue'.center(80))
+								print('numerator = ',numerator)
+								print('denominator = ',denominator)
+
+					avg_rel_error = np.mean(rel_errors)
+					print('avg_rel_error = ',avg_rel_error)
+
+					global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+					if self.mesh_constructor_comm.rank == 0:
+						print('Double loop MC global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
 
 
 		if test_output:
@@ -377,10 +432,10 @@ class ActiveSubspaceProjector:
 			for i in range(LocalObservables.nvec()):
 				t0 = time.time()
 				parRandom.normal(1,self.noise)
-				self.prior.sample(self.noise,self.m)
+				self.prior.sample(self.noise,self.ms[0])
 				x = [self.us[0],self.ms[0],None]
 				self.observable.setLinearizationPoint(x)
-				LocalObservables[i].axpy(1.,self.observable.eval(self.m))
+				LocalObservables[i].axpy(1.,self.observable.eval(self.ms[0]))
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 					print('Generating local observable ',i, ' for output error test')
 
