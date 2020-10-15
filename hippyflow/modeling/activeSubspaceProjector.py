@@ -17,7 +17,7 @@ def ActiveSubspaceParameterList():
 
 	"""
 	parameters = {}
-	parameters['samples_per_process'] 		= [16, 'Number of samples per process']
+	parameters['samples_per_process'] 		= [64, 'Number of samples per process']
 	parameters['error_test_samples'] 		= [50, 'Number of samples for error test']
 	parameters['rank'] 				 		= [128, 'Rank of subspace']
 	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
