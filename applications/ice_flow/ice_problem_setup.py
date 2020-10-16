@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('-ninstance',dest = 'ninstance',required= False,default = 1,help='number of instances',type = int)
 parser.add_argument('-nsubdomain',dest = 'nsubdomain',required= False,default = 1,help='number of partition',type = int)
 parser.add_argument('-sample_per',dest = 'sample_per',required= False,default = 32,help='number of samples per instance',type = int)
-parser.add_argument('-data_per_process',dest = 'data_per_process',required= False,default = 512,help='number of data generated per instance',type = int)
+parser.add_argument('-data_per_process',dest = 'data_per_process',required= False,default = 2048,help='number of data generated per instance',type = int)
 parser.add_argument('-as_rank',dest = 'as_rank',required= False,default = 128,help='rank for active subspace projectors',type = int)
 parser.add_argument('-pod_rank',dest = 'pod_rank',required= False,default = 128,help='rank for POD projectors',type = int)
 parser.add_argument('-n_obs',dest = 'n_obs',required= False,default = 100,help='targets for observable',type = int)
@@ -93,6 +93,8 @@ if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
+del(AS)
+
 # Karhunen-Lo\`{e}ve Expansion
 if args.save_kle:
 
@@ -104,6 +106,7 @@ if args.save_kle:
 
 	KLE.construct_input_subspace()
 
+del(KLE)
 
 # Proper Orthogonal Decomposition
 if args.save_data or args.save_pod:
