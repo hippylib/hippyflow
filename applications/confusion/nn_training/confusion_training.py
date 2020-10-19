@@ -35,17 +35,17 @@ parser.add_argument('-max_sweeps',dest = 'max_sweeps',required= False,default = 
 parser.add_argument('-fixed_input_rank',dest = 'fixed_input_rank',required= False,default = 16,help='fixed input rank',type = int)
 parser.add_argument('-fixed_ouput_rank',dest = 'fixed_output_rank',required= False,default = 16,help='fixed input rank',type = int)
 
-parser.add_argument("-architecture", dest='architecture',required=False, default = 'projected_dense', help="architecture type",type=str)
+parser.add_argument("-architecture", dest='architecture',required=False, default = 'as_projected_dense', help="architecture type",type=str)
 
 parser.add_argument('-test_data_size',dest = 'test_data_size',required= False,default = 512,help='test data size',type = int)
-parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 512+256,help='train data size',type = int)
+parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 64,help='train data size',type = int)
 
 parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.5,\
 						help='Matern prior gamma, (delta I - gamma Laplacian)',type = float)
 parser.add_argument('-delta',dest = 'delta',required= False,default = 0.5,\
 						help='Matern prior delta, (delta I - gamma Laplacian)',type = float)
 
-parser.add_argument('-nx',dest = 'nx',required= False,default = 192,help='Mesh discretization parameter',type = int)
+parser.add_argument('-nx',dest = 'nx',required= False,default = 64,help='Mesh discretization parameter',type = int)
 args = parser.parse_args()
 
 
@@ -161,9 +161,58 @@ def get_projectors(data_dir,as_input_tolerance=1e-4,as_output_tolerance=1e-4,\
 	projector_dictionary['POD'] = POD_projector
 	return projector_dictionary
 
-# def check_subspace_angles(projector_dictionary):
-# 	KL = projector_dictionary['']
+def modify_projectors(projectors,input_subspace,output_subspace):
+	# Modify the input projectors
+	assert input_subspace in ['kle','as','random']
 
+	if input_subspace in ['kle','as']:
+		# Always orthogonalize AS and KLE for best results
+		orthogonalize_input = True
+		rescale_input = True
+		if input_subspace == 'kle':
+			input_projector = projectors['KLE']
+		elif input_subspace == 'as':
+			input_projector = projectors['AS_input']
+
+
+		if orthogonalize_input:
+			input_projector,_ = np.linalg.qr(input_projector)
+
+		if rescale_input:
+			# Scaling factor of 10 seemed to perform well for KLE and AS
+			# and this was independent of the projector rank.
+			scale_factor_input = 10.
+			input_projector /= scale_factor_input*np.linalg.norm(input_projector)
+
+	elif input_subspace == 'random':
+		input_projector = np.random.randn(*projectors['KLE'].shape)
+		input_projector /= np.linalg.norm(input_projector)
+
+	# Modify the output projectors
+	# It seems that (re)-orthogonalizing the POD vectors
+	# may not improve the neural network.
+	assert output_subspace in ['pod','as','random']
+
+	if output_subspace in ['pod','as']:
+		orthogonalize_output = True
+		rescale_output = True
+		if output_subspace == 'pod':
+			output_projector = projectors['POD']
+		elif output_subspace == 'as':
+			output_projector = projectors['AS_output']
+
+		if orthogonalize_output:
+			output_projector,_ = np.linalg.qr(output_projector)
+
+		if rescale_output:
+			scale_factor_output = 1.
+			output_projector /= scale_factor_output*np.linalg.norm(output_projector)
+
+	if output_subspace == 'random':
+		output_projector = np.random.randn(*projectors['POD'].shape)
+		output_projector /= np.linalg.norm(output_projector)
+
+	return input_projector, output_projector
 
 ntargets = 100
 gamma = args.gamma
@@ -195,83 +244,61 @@ fixed_output_rank = args.fixed_output_rank
 
 projectors = get_projectors(data_dir,fixed_input_rank = fixed_input_rank,fixed_output_rank = fixed_output_rank)
 
-
-# Modify the input projectors
-input_subspace = 'kle'
-
-assert input_subspace in ['kle','as','random']
-
-if input_subspace in ['kle','as']:
-	# Always orthogonalize AS and KLE for best results
-	orthogonalize_input = True
-	rescale_input = True
-	if input_subspace == 'kle':
-		input_projector = projectors['KLE']
-	elif input_subspace == 'as':
-		input_projector = projectors['AS_input']
-
-
-	if orthogonalize_input:
-		input_projector,_ = np.linalg.qr(input_projector)
-
-	if rescale_input:
-		# Scaling factor of 10 seemed to perform well for KLE and AS
-		# and this was independent of the projector rank.
-		scale_factor_input = 10.
-		input_projector /= scale_factor_input*np.linalg.norm(input_projector)
-
-elif input_subspace == 'random':
-	input_projector = np.random.randn(*projectors['KLE'].shape)
-	input_projector /= np.linalg.norm(input_projector)
-
-# Modify the output projectors
-# It seems that (re)-orthogonalizing the POD vectors
-# may not improve the neural network 
-output_subspace = 'pod'
-
-assert output_subspace in ['pod','as','random']
-
-if output_subspace in ['pod','as']:
-	orthogonalize_output = True
-	rescale_output = True
-	if output_subspace == 'pod':
-		output_projector = projectors['POD']
-	elif output_subspace == 'as':
-		output_projector = projectors['AS_output']
-
-	if orthogonalize_output:
-		output_projector,_ = np.linalg.qr(output_projector)
-
-	if rescale_output:
-		scale_factor_output = 1.
-		output_projector /= scale_factor_output*np.linalg.norm(output_projector)
-
-if output_subspace == 'random':
-	output_projector = np.random.randn(*projectors['POD'].shape)
-	output_projector /= np.linalg.norm(output_projector)
-
-################################################################################
-
 architecture = args.architecture
-
-assert architecture in ['generic_dense','generic_projected','generic_linear','low_rank_linear','projected_dense','plrrn']
-
+	################################################################################
+assert architecture in ['generic_dense','generic_linear','kle_projected_dense','as_projected_dense','random_projected_dense','low_rank_linear']
 
 if architecture == 'generic_dense':
 	regressor = generic_dense(input_dim,output_dim)
+	# regressor.summary()
+	print('Using generic dense network'.center(80))
 
 elif architecture == 'generic_linear':
 	regressor = generic_linear(input_dim,output_dim)
+	# regressor.summary()
+	print('Using generic linear network'.center(80))
 
-elif architecture == 'projected_dense':
+elif architecture == 'kle_projected_dense':
+	input_subspace = 'kle'
+	output_subspace = 'pod'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
 	trainable = False
 	intermediate_layers = 2
 	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
 							trainable = trainable)
+	# regressor.summary()
+	print('Using KLE dense network'.center(80))
+
+elif architecture == 'as_projected_dense':
+	input_subspace = 'as'
+	output_subspace = 'pod'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
+	trainable = False
+	intermediate_layers = 2
+	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
+							trainable = trainable)
+	# regressor.summary()
+	print('Using AS dense network'.center(80))
+
+elif architecture == 'random_projected_dense':
+	input_subspace = 'random'
+	output_subspace = 'random'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
+	trainable = False
+	intermediate_layers = 2
+	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
+							trainable = trainable)
+	# regressor.summary()
+	print('Using random projected dense network'.center(80))
+
 
 elif architecture == 'low_rank_linear':
-	regressor = low_rank_linear(input_dim,output_dim,rank = input_projector.shape[-1])
+	regressor = low_rank_linear(input_dim,output_dim,rank = fixed_input_rank)
+	# regressor.summary()
+	print('Using low rank linear network'.center(80))
 
+else:
+	raise 
 
 regressor.summary()
 
