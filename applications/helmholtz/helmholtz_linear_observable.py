@@ -48,18 +48,16 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, n_obs = 100,out
 	
 	c = 343.4                                            #m/s     speed of sound in air
 	rho = 1.204                                          #kg/m^3  density of air
-	all_frequencies = np.array([100])      
+	all_frequencies = np.array([300])      
 	assert PML is not None         	 #Freq. in Hertz
 	pml = PML(mesh, box, box_pml, 50)
 
-	ntargets = 20
+	ntargets = 100
 	ndim = 2
 	np.random.seed(seed=1)
 	targets = np.zeros([ntargets, ndim] )
-	targets[0:ntargets//2,0] = box[2]-.1        # integer division
-	targets[0:ntargets//2,1] = np.linspace(box[1]+.1, box[3]-.1, ntargets//2)
-	targets[ntargets//2:,0]  = np.linspace(box[0]+.1, box[2]-.1, ntargets//2)
-	targets[ntargets//2:,1]  = box[3]-.1
+	targets[:,0]  = np.linspace(box[0]+.1, box[2]-.1, ntargets)
+	targets[:,1]  = box[3]-.1
 	
 	if rank == 0:
 		print( "Number of observation points: {0}".format(ntargets) )
