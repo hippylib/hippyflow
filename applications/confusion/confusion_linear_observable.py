@@ -10,12 +10,13 @@ from hippylib import *
 sys.path.append( os.environ.get('HIPPYFLOW_PATH'))
 from hippyflow import LinearStateObservable
 
-def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup/', verbose = False,seed = 0):
+def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup/',\
+									formulation = 'rhs', verbose = False,seed = 0):
 	'''
 
 	'''
 	class confusion_varf:
-		def __init__(self,Vh,save_fields = False,output_folder = 'confusion_setup/'):
+		def __init__(self,Vh,save_fields = False,formulation = 'rhs',output_folder = 'confusion_setup/'):
 			'''
 		
 			'''
@@ -34,6 +35,11 @@ def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup
 			# Constant coefficients for the PDE
 			self.c = dl.Constant(1.0)
 			self.k = dl.Constant(0.01)
+
+			self.formulation = formulation
+			print(80*'#')
+			print(formulation.center(80))
+
 		def computeVelocityField(self,mesh):
 			'''
 
@@ -70,6 +76,7 @@ def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup
 												 {"relative_tolerance":1e-4, "maximum_iterations":150}})
 			return vq.split()[0]
 
+
 		def __call__(self,u,m,p):
 			'''
 				Return the variational form of the PDE
@@ -82,11 +89,26 @@ def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup
 			'''
 			h = dl.CellDiameter(Vh[STATE].mesh())
 			v_norm = dl.sqrt( dl.dot(self.v,self.v) + 1e-6)
-			return (h/v_norm)*dl.dot( self.v, dl.nabla_grad(u)) * dl.dot( self.v, dl.nabla_grad(p)) * dl.dx\
-				+ self.k*dl.inner(dl.nabla_grad(u), dl.nabla_grad(p))*dl.dx \
-			   + dl.inner(dl.nabla_grad(u), self.v*p)*dl.dx \
-			   + self.c*u*u*u*p*dl.dx \
-			   - dl.exp(m)*self.f*p*dl.dx
+			if self.formulation == 'rhs':
+				return (h/v_norm)*dl.dot( self.v, dl.nabla_grad(u)) * dl.dot( self.v, dl.nabla_grad(p)) * dl.dx\
+					+ self.k*dl.inner(dl.nabla_grad(u), dl.nabla_grad(p))*dl.dx \
+				   + dl.inner(dl.nabla_grad(u), self.v*p)*dl.dx \
+				   + self.c*u*u*u*p*dl.dx \
+				   - dl.exp(m)*self.f*p*dl.dx
+			elif self.formulation == 'cubic_nonlinearity':
+				return (h/v_norm)*dl.dot( self.v, dl.nabla_grad(u)) * dl.dot( self.v, dl.nabla_grad(p)) * dl.dx\
+					+ self.k*dl.inner(dl.nabla_grad(u), dl.nabla_grad(p))*dl.dx \
+				   + dl.inner(dl.nabla_grad(u), self.v*p)*dl.dx \
+				   + self.c*dl.exp(m)*u*u*u*p*dl.dx \
+				   - self.f*p*dl.dx	 
+
+			elif self.formulation == 'diffusion':
+				self.k = dl.Constant(0.1)
+				return (h/v_norm)*dl.dot( self.v, dl.nabla_grad(u)) * dl.dot( self.v, dl.nabla_grad(p)) * dl.dx\
+					+ self.k*dl.exp(m)*dl.inner(dl.nabla_grad(u), dl.nabla_grad(p))*dl.dx \
+				   + dl.inner(dl.nabla_grad(u), self.v*p)*dl.dx \
+				   + self.c*u*u*u*p*dl.dx \
+				   - self.f*p*dl.dx	 
 
 
 	def u_boundary(x, on_boundary):
@@ -125,7 +147,7 @@ def confusion_linear_observable(mesh,n_obs = 100,output_folder ='confusion_setup
 	param_dimension = m0.get_local().shape[0]
 	m0.set_local(np.random.randn(param_dimension))
 
-	varf_handler = confusion_varf(Vh, output_folder = output_folder)
+	varf_handler = confusion_varf(Vh, output_folder = output_folder,formulation = formulation)
 
 	pde = PDEVariationalProblem(Vh, varf_handler, bc, bc0, is_fwd_linear=False)
 

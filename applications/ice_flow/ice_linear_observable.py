@@ -152,7 +152,11 @@ def ice_linear_observable(mesh,mesh_file = '',formulation = 'energy',n_obs = 100
 	
 	B = assemblePointwiseObservation(Vh[STATE], targets)
 
-	observable = LinearStateObservable(pde,B)
+	indicator_vec = dl.interpolate(dl.Constant( (1.,1.,1.,0.)), Vh[STATE]).vector()
+
+	restricted_B = DomainRestrictedOperator(indicator_vec,B)
+
+	observable = LinearStateObservable(pde,restricted_B)
 
 	return observable
 

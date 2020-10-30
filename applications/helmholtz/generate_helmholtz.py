@@ -14,14 +14,18 @@ def send_job_update(message):
 
 
 
-gds = [(1.0,5.0)]
+gds = [(1.0,5.0),(1.0,1.0),(5.0,1.0),(5.0,5.0),(2.0,10.),(2.0,2.0)]
+
+
+# gds = [(0.1,0.5),(0.5,2.5),(1.0,1.0),(5.0,1.0),(0.5,5.0)]
 
 # for gamma in gammas:
 # 	for delta in deltas:
 # 		gds.append((gamma,delta))
 
 # nxnys = [(32,32),(64,64),(96,96),(128,128),(160,160),(192,192)]
-nxnys = [(64,64),(192,192)]
+nxnys = [(64,64),(128,128)]
+# nxnys = [(128,128)]
 
 for (gamma,delta) in gds:
 	t0 = time.time()

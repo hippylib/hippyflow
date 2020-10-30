@@ -127,10 +127,13 @@ def generic_linear(input_dim,output_dim):
 	return regressor
 
 
-def low_rank_linear(input_dim,output_dim,input_trainable = True,rank = 16):
+def low_rank_linear(input_dim,output_dim,rank = 16):
 	input_data = tf.keras.layers.Input(shape=(input_dim,))
 	intermediate = tf.keras.layers.Dense(rank,use_bias = False,name = 'intermediate')(input_data)
 	output = tf.keras.layers.Dense(output_dim)(intermediate)
 	regressor = tf.keras.models.Model(input_data, output)
 	return regressor
+
+
+
 

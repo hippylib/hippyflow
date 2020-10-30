@@ -91,9 +91,9 @@ class ObservableJacobian:
                
          """
         if dim == 0:
-            self.observable.B.init_vector(x,0)
+            self.observable.init_vector(x,0)
         elif dim == 1:
-            self.observable.problem.C.init_vector(x,1)
+            self.observable.init_vector(x,1)
             #If the prior term shows up then the input dimension changes due to quadrature workaround
             # self.model.prior.sqrtM.init_vector(x,1)
         else: 

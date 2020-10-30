@@ -33,19 +33,19 @@ parser.add_argument('-hess_batch_size',dest = 'hess_batch_size',required= False,
 parser.add_argument('-max_sweeps',dest = 'max_sweeps',required= False,default = 100,help='max sweeps',type = float)
 
 parser.add_argument('-fixed_input_rank',dest = 'fixed_input_rank',required= False,default = 16,help='fixed input rank',type = int)
-parser.add_argument('-fixed_ouput_rank',dest = 'fixed_output_rank',required= False,default = 16,help='fixed input rank',type = int)
+parser.add_argument('-fixed_output_rank',dest = 'fixed_output_rank',required= False,default = 16,help='fixed input rank',type = int)
 
-parser.add_argument("-architecture", dest='architecture',required=False, default = 'as_projected_dense', help="architecture type",type=str)
+parser.add_argument("-architecture", dest='architecture',required=False, default = 'random_projected_dense', help="architecture type",type=str)
 
 parser.add_argument('-test_data_size',dest = 'test_data_size',required= False,default = 512,help='test data size',type = int)
-parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 64,help='train data size',type = int)
+parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 512,help='train data size',type = int)
 
-parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.5,\
+parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.1,\
 						help='Matern prior gamma, (delta I - gamma Laplacian)',type = float)
-parser.add_argument('-delta',dest = 'delta',required= False,default = 0.5,\
+parser.add_argument('-delta',dest = 'delta',required= False,default = 0.25,\
 						help='Matern prior delta, (delta I - gamma Laplacian)',type = float)
 
-parser.add_argument('-nx',dest = 'nx',required= False,default = 64,help='Mesh discretization parameter',type = int)
+parser.add_argument('-nx',dest = 'nx',required= False,default = 192,help='Mesh discretization parameter',type = int)
 args = parser.parse_args()
 
 
@@ -181,12 +181,14 @@ def modify_projectors(projectors,input_subspace,output_subspace):
 		if rescale_input:
 			# Scaling factor of 10 seemed to perform well for KLE and AS
 			# and this was independent of the projector rank.
-			scale_factor_input = 10.
+			scale_factor_input = float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
 			input_projector /= scale_factor_input*np.linalg.norm(input_projector)
 
 	elif input_subspace == 'random':
 		input_projector = np.random.randn(*projectors['KLE'].shape)
-		input_projector /= np.linalg.norm(input_projector)
+		input_projector,_ = np.linalg.qr(input_projector)
+		scale_factor_input = float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
+		input_projector /= scale_factor_input*np.linalg.norm(input_projector)
 
 	# Modify the output projectors
 	# It seems that (re)-orthogonalizing the POD vectors
@@ -222,9 +224,11 @@ nx = args.nx
 
 n_data = settings['train_data_size'] + settings['test_data_size']
 
-data_dir = '../data/n_obs_'+str(ntargets)+'_g'+str(gamma)+'_d'+str(delta)+'_nx'+str(nx)+'/'
+formulation = 'cubic_nonlinearity'
 
-assert os.path.isdir(data_dir), 'Directory does not exist'
+data_dir = '../data/'+formulation+'_n_obs_'+str(ntargets)+'_g'+str(gamma)+'_d'+str(delta)+'_nx'+str(nx)+'/'
+
+assert os.path.isdir(data_dir), 'Directory does not exist'+data_dir
 
 m_data, q_data = load_confusion_data(data_dir,rescale = False,n_data = n_data)
 
@@ -322,12 +326,12 @@ HLModelSettings['hessian_low_rank'] = args.hessian_low_rank
 HLModelSettings['max_backtrack'] = 16
 HLModelSettings['max_sweeps'] = args.max_sweeps
 
-HLModelSettings['problem_name'] = 'confusion_nt_'+str(ntargets)+'_g_'+str(gamma)+'_d_'+str(delta)+'_nx_'+str(nx)
+HLModelSettings['problem_name'] = 'confusion'+formulation+'_nt_'+str(ntargets)+'_g_'+str(gamma)+'_d_'+str(delta)+'_nx_'+str(nx)
 HLModelSettings['record_spectrum'] = bool(args.record_spectrum)
 HLModelSettings['rq_data_size'] = 100
 
 set_weights = True
-if architecture == 'projected_dense' and set_weights:
+if 'projected' in architecture and set_weights:
 	HLModelSettings['layer_weights'] = {'input_proj_layer':[input_projector],\
 					'output_layer':[output_projector.T,np.zeros(output_projector.T.shape[-1])]}
 

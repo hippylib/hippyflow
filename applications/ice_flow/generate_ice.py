@@ -12,13 +12,15 @@ import numpy as np
 
 # gds = [(0.1,0.1),(1.0,0.1),(0.1,1.0),(1.0,1.0)]
 
-gds = [(0.1,0.1)]
+gds = [(1.0,1.0)]
 
 # for gamma in gammas:
 # 	for delta in deltas:
 # 		gds.append((gamma,delta))
 
-mesh_files = ['meshes/half_dome_chop_16.xdmf','meshes/half_dome_chop_22.xdmf']
+# mesh_files = ['meshes/half_dome_chop_16.xdmf','meshes/half_dome_chop_22.xdmf']
+
+mesh_files = ['meshes/half_dome_chop_16.xdmf']
 
 for (gamma,delta) in gds:
 	for mesh_file in mesh_files:

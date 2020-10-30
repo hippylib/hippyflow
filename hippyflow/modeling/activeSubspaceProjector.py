@@ -120,6 +120,8 @@ class ActiveSubspaceProjector:
 
 		self.d_GN = None
 		self.V_GN = None
+		self.d_GN_noprior = None
+		self.V_GN_noprior = None
 		self.prior_preconditioned = None
 
 		self.d_NG = None
@@ -175,8 +177,10 @@ class ActiveSubspaceProjector:
 			else:
 				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
 			 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+			self.d_GN_noprior, self.V_GN_noprior = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+
 		self.prior_preconditioned = prior_preconditioned
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print(('Input subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
@@ -187,8 +191,14 @@ class ActiveSubspaceProjector:
 			out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
-				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
-
+				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+			if self.d_GN_noprior is not None:
+				np.save(self.parameters['output_directory']+'AS_input_projector_noprior',mv_to_dense(self.V_GN_noprior))
+				np.save(self.parameters['output_directory']+'AS_d_GN_noprior',self.d_GN_noprior)
+				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_noprior_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_GN_noprior,\
+					axis_label = ['i',r'$\lambda_i$',\
+					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
 	def construct_output_subspace(self):

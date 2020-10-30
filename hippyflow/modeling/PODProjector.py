@@ -120,6 +120,7 @@ class PODProjector:
 		self.observable.init_vector(observable_vector,dim = 0)
 		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
+
 		#Read data from file and build subspace option
 		for i in range(LocalObservables.nvec()):
 			if self.parameters['verbose']:
