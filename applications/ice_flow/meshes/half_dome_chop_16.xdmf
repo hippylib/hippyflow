@@ -1,3 +1,0 @@
-<Xdmf Version="3.0"><Domain><Grid Name="Grid"><Information Name="Information" Value="0">
-<![CDATA[<main />]]>
-</Information><Geometry GeometryType="XYZ"><DataItem DataType="Float" Dimensions="1015 3" Format="HDF" Precision="8">half_dome_chop_16.h5:/data0</DataItem></Geometry><Topology NodesPerElement="4" NumberOfElements="4533" TopologyType="Tetrahedron"><DataItem DataType="Int" Dimensions="4533 4" Format="HDF" Precision="8">half_dome_chop_16.h5:/data1</DataItem></Topology></Grid></Domain></Xdmf>
