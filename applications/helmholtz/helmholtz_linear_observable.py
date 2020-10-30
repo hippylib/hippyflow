@@ -40,11 +40,12 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, n_obs = 100,out
 		print( "Number of dofs: STATE={0}, PARAMETER={1}, ADJOINT={2}".format(*dims) )
 
 	# Initialize Expressions
-	n_sources = 10
-	sources_loc = []
-	for yi in np.linspace(box[1], box[3], n_sources):
-		sources_loc.append( dl.Point(box[0], yi) )
+	# n_sources = 1
+	# sources_loc = []
+	# for xi in np.linspace(box[0], box[2], n_sources):
+	# 	sources_loc.append( dl.Point(xi, box[3]-0.15) )
 	
+	sources_loc = [dl.Point((box[0]+.1+(box[2]-0.1)/2)/2,box[3]-0.15)]
 	
 	c = 343.4                                            #m/s     speed of sound in air
 	rho = 1.204                                          #kg/m^3  density of air
@@ -56,7 +57,7 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, n_obs = 100,out
 	ndim = 2
 	np.random.seed(seed=1)
 	targets = np.zeros([ntargets, ndim] )
-	targets[:,0]  = np.linspace(box[0]+.1, box[2]-.1, ntargets)
+	targets[:,0]  = np.linspace(box[0]+.1, (box[2]-.1)/2, ntargets)
 	targets[:,1]  = box[3]-.1
 	
 	if rank == 0:
