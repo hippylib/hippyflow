@@ -15,7 +15,7 @@ sys.path.append( os.environ.get('HIPPYFLOW_PATH'))
 from hippyflow import *
 
 
-from matern_prior_2d import matern_prior_2d
+from maternPrior import BiLaplacian2D, Laplacian2D
 from confusion_linear_observable import confusion_linear_observable
 
 
@@ -26,7 +26,7 @@ parser.add_argument('-sample_per',dest = 'sample_per',required= False,default = 
 parser.add_argument('-data_per_process',dest = 'data_per_process',required= False,default = 512,help='number of data generated per instance',type = int)
 parser.add_argument('-as_rank',dest = 'as_rank',required= False,default = 128,help='rank for active subspace projectors',type = int)
 parser.add_argument('-pod_rank',dest = 'pod_rank',required= False,default = 128,help='rank for POD projectors',type = int)
-parser.add_argument('-n_obs',dest = 'n_obs',required= False,default = 100,help='targets for observable',type = int)
+parser.add_argument('-sqrt_n_obs',dest = 'sqrt_n_obs',required= False,default = 10,help='targets for observable',type = int)
 parser.add_argument('-nx',dest = 'nx',required= False,default = 32,help='targets for observable',type = int)
 parser.add_argument('-ny',dest = 'ny',required= False,default = 32,help='targets for observable',type = int)
 parser.add_argument('-gamma',dest = 'gamma',required=False,default = 1.0, help="gamma for matern prior",type=float)
@@ -59,13 +59,13 @@ mesh_constructor_comm, collective_comm = splitCommunicators(world,args.nsubdomai
 my_collective = MultipleSamePartitioningPDEsCollective(collective_comm)
 
 # Initialize directories for saving data
-output_directory = 'data/'+args.formulation+'_n_obs_'+str(args.n_obs)+'_g'+str(args.gamma)+'_d'+str(args.delta)+'_nx'+str(args.nx)+'/'
+output_directory = 'data/'+args.formulation+'_n_obs_'+str(args.sqrt_n_obs**2)+'_g'+str(args.gamma)+'_d'+str(args.delta)+'_nx'+str(args.nx)+'/'
 os.makedirs(output_directory,exist_ok = True)
 save_states_dir = output_directory+'save_states/'
 
 # Instantiate confusion linear observable
 mesh = dl.UnitSquareMesh(mesh_constructor_comm, args.nx, args.ny)
-observable_kwargs = {'n_obs':args.n_obs,'output_folder':save_states_dir,'formulation':args.formulation}
+observable_kwargs = {'sqrt_n_obs':args.sqrt_n_obs,'output_folder':save_states_dir}
 observable = confusion_linear_observable(mesh,**observable_kwargs)
 # Matern Covariance Prior is instantiated here so that each process can sample m.
 Vh = observable.problem.Vh

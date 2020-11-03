@@ -1,5 +1,8 @@
 import numpy as np
 
+from hippylib import *
+
+
 def mv_to_dense(multivector):
     multivector_shape = (multivector[0].get_local().shape[0],multivector.nvec())
     as_np_array = np.zeros(multivector_shape)

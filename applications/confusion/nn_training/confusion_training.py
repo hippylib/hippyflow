@@ -32,17 +32,17 @@ parser.add_argument('-batch_size',dest = 'batch_size',required= False,default = 
 parser.add_argument('-hess_batch_size',dest = 'hess_batch_size',required= False,default = 16,help='hess batch size',type = int)
 parser.add_argument('-max_sweeps',dest = 'max_sweeps',required= False,default = 100,help='max sweeps',type = float)
 
-parser.add_argument('-fixed_input_rank',dest = 'fixed_input_rank',required= False,default = 16,help='fixed input rank',type = int)
+parser.add_argument('-fixed_input_rank',dest = 'fixed_input_rank',required= False,default = 8,help='fixed input rank',type = int)
 parser.add_argument('-fixed_output_rank',dest = 'fixed_output_rank',required= False,default = 16,help='fixed input rank',type = int)
 
-parser.add_argument("-architecture", dest='architecture',required=False, default = 'random_projected_dense', help="architecture type",type=str)
+parser.add_argument("-architecture", dest='architecture',required=False, default = 'as_projected_dense', help="architecture type",type=str)
 
 parser.add_argument('-test_data_size',dest = 'test_data_size',required= False,default = 512,help='test data size',type = int)
-parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 512,help='train data size',type = int)
+parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 1024,help='train data size',type = int)
 
 parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.1,\
 						help='Matern prior gamma, (delta I - gamma Laplacian)',type = float)
-parser.add_argument('-delta',dest = 'delta',required= False,default = 0.25,\
+parser.add_argument('-delta',dest = 'delta',required= False,default = 1.0,\
 						help='Matern prior delta, (delta I - gamma Laplacian)',type = float)
 
 parser.add_argument('-nx',dest = 'nx',required= False,default = 192,help='Mesh discretization parameter',type = int)
