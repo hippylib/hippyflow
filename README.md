@@ -1,4 +1,4 @@
-			Dimension reduced surrogate construction for parametric PDE maps
+		Dimension reduced surrogate construction for parametric PDE maps
 
 		      ___                       ___         ___               
 		     /__/\        ___          /  /\       /  /\        ___   
