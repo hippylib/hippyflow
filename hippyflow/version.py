@@ -12,5 +12,5 @@
 # Software Foundation) version 2.0 dated June 1991.
 
 
-version_info = (3, 0, 0)
+version_info = (0, 1, 0)
 __version__ = '.'.join([str(x) for x in version_info])
