@@ -34,6 +34,9 @@ parser.add_argument('-delta',dest = 'delta',required=False,default = 5.0, help="
 parser.add_argument('-formulation',dest = 'formulation',required=False,default = 'single_freq', help="formulation name string",type=str)
 parser.add_argument('-use_laplace_prior',dest = 'use_laplace_prior',\
 					required= False,default = 0,help='boolean for saving of data',type = int)
+
+parser.add_argument('-frequency',dest = 'frequency',required=False,default = 300, help="formulation name string",type=int)
+
 parser.add_argument('-save_data',dest = 'save_data',\
 					required= False,default = 1,help='boolean for saving of data',type = int)
 parser.add_argument('-save_pod',dest = 'save_pod',\
@@ -61,7 +64,7 @@ mesh_constructor_comm, collective_comm = splitCommunicators(world,args.nsubdomai
 my_collective = MultipleSamePartitioningPDEsCollective(collective_comm)
 
 # Initialize directories for saving data
-output_directory = 'data/'+args.formulation+'_n_obs_'+str(args.sqrt_n_obs**2)+'_g'+str(args.gamma)+'_d'+str(args.delta)+'_nx'+str(args.nx)+'/'
+output_directory = 'data/'+args.formulation+'_'+str(args.frequency)+'_n_obs_'+str(args.sqrt_n_obs**2)+'_g'+str(args.gamma)+'_d'+str(args.delta)+'_nx'+str(args.nx)+'/'
 if args.use_laplace_prior:
 	print(80*'#')
 	print('Using Laplace Prior (not a trace class operator)'.center(80))
@@ -77,7 +80,7 @@ box_pml = [-1., -1., 4., 3.]
 
 mesh = dl.RectangleMesh(mesh_constructor_comm,dl.Point(box_pml[0], box_pml[1]), dl.Point(box_pml[2], box_pml[3]), args.nx, args.ny)
 
-observable_kwargs = {'box': box,'box_pml':box_pml,'sqrt_n_obs':args.sqrt_n_obs,'output_folder':save_states_dir}
+observable_kwargs = {'box': box,'box_pml':box_pml,'sqrt_n_obs':args.sqrt_n_obs,'output_folder':save_states_dir, 'frequency':args.frequency}
 
 
 observable = helmholtz_linear_observable(mesh,**observable_kwargs)

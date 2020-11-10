@@ -280,6 +280,106 @@ class PODProjector:
 
 
 
+	def input_output_error_test(self,V_MV,Cinv = None,rank_pairs = [None],cut_off = 1e-10):
+		# ranks assumed to be python list with sort in place member function
+
+		assert self.d is not None
+		assert self.U_MV is not None
+		ranks.sort()
+		# Check to see if the multivectors are large enough
+		# truncate eigenvalues for numerical stability
+
+		numericalrank = np.where(self.d > cut_off)[-1][-1]
+		ranks = ranks[:np.where(ranks < numericalrank)[0][-1]]
+
+		# Instantiate parameter vector for requisite data structures
+		LocalParameters = MultiVector(self.m,self.parameters['sample_per_process'])
+		LocalParameters.zero()
+
+		input_projection_vector = self.observable.generate_vector(PARAMETER)
+
+		# Instantiate an observable vector for requisite data structures
+		observable_vector = dl.Vector(self.mesh_constructor_comm)
+		self.observable.init_vector(observable_vector,dim = 0)
+
+		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables.zero()
+		for i in range(LocalObservables.nvec()):
+			t0 = time.time()
+			parRandom.normal(1,self.noise)
+			self.prior.sample(self.noise,LocalParameters[i])
+			x = [self.u,LocalParameters[i],None]
+			self.observable.setLinearizationPoint(x)
+			LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+				print('Generating local parameter and observable ',i,' for POD error test took',time.time() -t0, 's')
+
+		# LocalProjectedObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		# LocalProjectedObservables.zero()
+
+		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+
+
+		output_projection_vector = dl.Vector(self.mesh_constructor_comm)
+		reduced_q_vector = dl.Vector(self.mesh_constructor_comm)
+		self.observable.init_vector(output_projection_vector,dim = 0)
+		self.observable.init_vector(reduced_q_vector,dim = 0)
+
+		global_avg_rel_errors = []
+		for (rank_in,rank_out) in rank_pairs:
+			# Define input projector operator for rank_in
+			V_r = MultiVector(V_MV[0],rank_in)
+			for i in range(rank_in):
+				V_r[i].axpy(1.,V_MV[i])
+			input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
+			if Cinv is not None:
+				InputProjectorOperator = PriorPreconditionedProjector(V_r,Cinv, input_init_vector_lambda)
+			else:
+				InputProjectorOperator = LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
+
+			# Define output projector operator for rank_out
+			U_MV = MultiVector(self.U_MV[0],rank)
+			d = self.d[0:rank]
+			for i in range(rank):
+				U_MV[i].axpy(1.,self.U_MV[i])
+
+			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
+			PODOperator = LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
+
+
+			LocalErrors.zero()
+			rel_errors = np.zeros(LocalErrors.nvec())
+			for i in range(LocalErrors.nvec()):
+				t0 = time.time()
+				input_projection_vector.zero()
+				output_projection_vector.zero()
+				reduced_q_vector.zero()
+				
+				LocalErrors[i].axpy(1.,LocalObservables[i])
+				denominator = LocalErrors[i].norm('l2')
+
+				InputProjectorOperator.mult(LocalParameters[i],input_projection_vector)
+
+				x = [self.u,input_projection_vector,None]
+				self.observable.setLinearizationPoint(x)
+				reduced_q_vector.axpy(1.,self.observable.eval(input_projection_vector))
+
+				PODOperator.mult(reduced_q_vector,output_projection_vector)
+				LocalErrors[i].axpy(-1.,output_projection_vector)
+				numerator = LocalErrors[i].norm('l2')
+				rel_errors[i] = numerator/denominator
+				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+					print('Local error calculation ',i,' for POD error test took',time.time() -t0, 's')
+					print('numerator for ',i, ' is ', numerator)
+					print('denominator for ', i , ' is ', denominator)
+					print('rel_errors[i] for ',i, ' is ',rel_errors[i])
+
+			avg_rel_error = np.mean(rel_errors)
+			global_avg_rel_errors.append(self.collective.allReduce(avg_rel_error,'avg'))
+			if self.mesh_constructor_comm.rank == 0:
+				print('Global average relative error = ',global_avg_rel_errors[-1])
+
+		return global_avg_rel_errors
 
 
 

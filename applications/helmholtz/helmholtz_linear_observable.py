@@ -14,7 +14,7 @@ from HelmholtzProblem import SingleSourceHelmholtzProblem, PML
 
 dl.parameters["form_compiler"]["quadrature_degree"] = 6
 
-def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10,output_folder ='helmholtz_setup/', verbose = False,seed = 0):
+def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10,output_folder ='helmholtz_setup/',frequency = 300, verbose = False,seed = 0):
 	'''
 
 	'''
@@ -52,7 +52,7 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 	
 	c = 343.4                                            #m/s     speed of sound in air
 	rho = 1.204                                          #kg/m^3  density of air
-	all_frequencies = np.array([300])      
+	all_frequencies = np.array([frequency])  
 	assert PML is not None         	 #Freq. in Hertz
 	pml = PML(mesh, box, box_pml, 50)
 

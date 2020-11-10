@@ -69,7 +69,7 @@ observable_kwargs = {'sqrt_n_obs':args.sqrt_n_obs,'output_folder':save_states_di
 observable = confusion_linear_observable(mesh,**observable_kwargs)
 # Matern Covariance Prior is instantiated here so that each process can sample m.
 Vh = observable.problem.Vh
-prior = matern_prior_2d(Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
+prior = BiLaplacian2D(Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
 
 # Active Subspace
 if args.save_as:
@@ -82,6 +82,7 @@ if args.save_as:
 	AS = ActiveSubspaceProjector(observable,prior, mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = AS_parameters)	
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
+
 
 # Karhunen-Lo\`{e}ve Expansion
 if args.save_kle:
@@ -105,6 +106,7 @@ if args.save_data or args.save_pod:
 	POD = PODProjector(observable,prior,\
 		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = POD_parameters)
 
+
 if args.save_data:
 	print(80*'#')
 	print('Made it to the POD data generation!')
@@ -121,6 +123,8 @@ if args.save_two_states:
 	print(80*'#')
 	print('Saving two states')
 	POD.two_state_solution()
+
+
 
 
 

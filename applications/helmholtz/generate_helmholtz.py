@@ -16,7 +16,7 @@ def send_job_update(message):
 
 # gds = [(1.0,10.0),(0.5,2.5),(0.5,5.0),(1.,5.),(2.,10.)]
 
-gds = [(0.5,5.0),(1.,5.),(2.,10.)]
+gds = [(1.,5.)]
 
 
 # gds = [(0.1,0.5),(0.5,2.5),(1.0,1.0),(5.0,1.0),(0.5,5.0)]
@@ -26,15 +26,17 @@ gds = [(0.5,5.0),(1.,5.),(2.,10.)]
 # 		gds.append((gamma,delta))
 
 # nxnys = [(32,32),(64,64),(96,96),(128,128),(160,160),(192,192)]
-nxnys = [(64,64),(128,128)]
+nxnys = [(128,128)]
 # nxnys = [(128,128)]
+frequency = 600
 
 for (gamma,delta) in gds:
 	t0 = time.time()
 	for nx,ny in nxnys:
 		print(80*'#')
 		print(('Running for gd = '+str((gamma,delta))+' nx,ny = '+str((nx,ny))).center(80))
-		os.system('mpirun -n 4 python helmholtz_problem_setup.py -ninstance 4 -gamma '+str(gamma)+' -delta '+str(delta)+' -nx '+str(nx)+' -ny '+str(ny))
+		os.system('mpirun -n 4 python helmholtz_problem_setup.py -ninstance 4 -gamma '\
+				+str(gamma)+' -delta '+str(delta)+' -nx '+str(nx)+' -ny '+str(ny)+' -frequency '+str(frequency))
 		email_text = 'Finished the data generation job for gamma,delta = '+str((gamma,delta))+' and it took '+str(time.time() - t0)+' s'
 		email_subject = 'Helmholtz data generation'+' gamma,delta = '+str((gamma,delta))
 		message = 'Subject: {}\n\n{}'.format(email_subject, email_text)

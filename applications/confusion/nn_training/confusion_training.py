@@ -38,7 +38,7 @@ parser.add_argument('-fixed_output_rank',dest = 'fixed_output_rank',required= Fa
 parser.add_argument("-architecture", dest='architecture',required=False, default = 'as_projected_dense', help="architecture type",type=str)
 
 parser.add_argument('-test_data_size',dest = 'test_data_size',required= False,default = 512,help='test data size',type = int)
-parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 1024,help='train data size',type = int)
+parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 512,help='train data size',type = int)
 
 parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.1,\
 						help='Matern prior gamma, (delta I - gamma Laplacian)',type = float)

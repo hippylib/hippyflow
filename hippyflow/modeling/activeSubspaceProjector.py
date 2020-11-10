@@ -12,6 +12,8 @@ from .jacobian import *
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
 from ..utilities.plotting import *
 
+from .priorPreconditionedProjector import PriorPreconditionedProjector
+
 def ActiveSubspaceParameterList():
 	"""
 
@@ -241,7 +243,7 @@ class ActiveSubspaceProjector:
 		ranks.sort()
 		if test_input:
 			# Neither test currently makes any sense when the projectors are covariance orthogonal.
-			assert self.prior_preconditioned == False, 'Input Error tests not implemented for prior preconditioned subspace'
+			# assert self.prior_preconditioned == False, 'Input Error tests not implemented for prior preconditioned subspace'
 			# Simple projection test
 			if self.d_GN is None:
 				if self.mesh_constructor_comm.rank == 0:
@@ -283,7 +285,10 @@ class ActiveSubspaceProjector:
 					for i in range(rank):
 						V_GN[i].axpy(1.,self.V_GN[i])
 				input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
-				InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
+				if self.prior_preconditioned:
+					InputProjectorOperator = PriorPreconditionedProjector(V_GN,self.prior.R, input_init_vector_lambda)
+				else:
+					InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
 			
 				rel_errors = np.zeros(LocalErrors.nvec())
 				for i in range(LocalErrors.nvec()):
@@ -302,7 +307,7 @@ class ActiveSubspaceProjector:
 
 			# Double Loop MC Error test does not work when prior preconditioning is used.
 			# This will be fixed soon.
-			if True:
+			if False:
 				if self.d_GN is None:
 					if self.mesh_constructor_comm.rank == 0:
 						print('Constructing input subspace')
@@ -365,7 +370,10 @@ class ActiveSubspaceProjector:
 						for i in range(rank):
 							V_GN[i].axpy(1.,self.V_GN[i])
 					input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
-					InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
+					if self.prior_preconditioned:
+						InputProjectorOperator = PriorPreconditionedProjector(V_GN,self.prior.R, input_init_vector_lambda)
+					else:
+						InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
 					print('Constructed projection operator for rank ',rank)
 					rel_errors = np.zeros(LocalErrors.nvec())
 
