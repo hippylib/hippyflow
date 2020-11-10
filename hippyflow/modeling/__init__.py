@@ -11,22 +11,25 @@
 # terms of the GNU General Public License (as published by the Free
 # Software Foundation) version 2.0 dated June 1991.
 
+from .activeSubspaceProjector import ActiveSubspaceProjector, ActiveSubspaceParameterList
+
+from .blockVector import BlockVector 
+
+from .cMinimization import ConstrainedNSolver
+
 from .jacobian import Jacobian, ObservableJacobian, JJT, JTJ
+
+from .KLEProjector import KLEProjector, KLEParameterList
+
+from .maternPrior import BiLaplacian2D, Laplacian2D
+
+from .multiPDEProblem import MultiPDEProblem
 
 from .observable import LinearStateObservable, DomainRestrictedOperator
 
 from .PODProjector import PODProjector, PODParameterList
 
-from .KLEProjector import KLEProjector, KLEParameterList
-
-from .activeSubspaceProjector import ActiveSubspaceProjector, ActiveSubspaceParameterList
-
-from .cMinimization import ConstrainedNSolver
-
-from .blockVector import BlockVector 
-
-from .multiPDEProblem import MultiPDEProblem
-
 from .priorPreconditionedProjector import PriorPreconditionedProjector
+
 
 
