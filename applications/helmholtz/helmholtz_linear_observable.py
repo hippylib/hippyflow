@@ -27,17 +27,17 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 	nproc = dl.MPI.size(mesh.mpi_comm())
 
 	# Define the function spaces
-	if rank == 0:
-		sep = "\n"+"#"*80+"\n"
-		print( sep, "Set up the finite element spaces", sep)
+	# if rank == 0:
+	# 	sep = "\n"+"#"*80+"\n"
+	# 	print( sep, "Set up the finite element spaces", sep)
 		
 	Vh2 = dl.VectorFunctionSpace(mesh, 'Lagrange', 2)
 	Vh1 = dl.FunctionSpace(mesh, 'Lagrange', 1)
 	Vh = [Vh2, Vh1, Vh2]
 	dims = [Vhi.dim() for Vhi in Vh]
 	
-	if rank == 0:
-		print( "Number of dofs: STATE={0}, PARAMETER={1}, ADJOINT={2}".format(*dims) )
+	# if rank == 0:
+	# 	print( "Number of dofs: STATE={0}, PARAMETER={1}, ADJOINT={2}".format(*dims) )
 
 	# Initialize Expressions
 	# n_sources = 1
@@ -57,8 +57,9 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 	pml = PML(mesh, box, box_pml, 50)
 
 	ndim = 2
-	x_targets = np.linspace(source_loc_[0]-0.2,source_loc_[0]+.2,sqrt_n_obs)
-	y_targets = np.linspace(box[3]-0.25,box[3]-0.05,sqrt_n_obs)
+	obs_length = 0.2
+	x_targets = np.linspace(source_loc_[0]-obs_length,source_loc_[0]+obs_length,sqrt_n_obs)
+	y_targets = np.linspace(box[3]-0.05-obs_length,box[3]-obs_length + 0.15,sqrt_n_obs)
 	targets = []
 	for xi in x_targets:
 		for yi in y_targets:
@@ -72,8 +73,8 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 	# targets[:,1]  = box[3]-.1
 	
 	ntargets = len(targets)
-	if rank == 0:
-		print( "Number of observation points: {0}".format(ntargets) )
+	# if rank == 0:
+	# 	print( "Number of observation points: {0}".format(ntargets) )
 
 	f = all_frequencies[0]
 	omega = 2.*np.pi*f

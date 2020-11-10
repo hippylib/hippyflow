@@ -9,6 +9,8 @@ from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
 from ..utilities.plotting import *
+from .priorPreconditionedProjector import PriorPreconditionedProjector
+
 
 def PODParameterList():
 	"""
@@ -123,8 +125,8 @@ class PODProjector:
 
 		#Read data from file and build subspace option
 		for i in range(LocalObservables.nvec()):
-			if self.parameters['verbose']:
-				print('Starting observable generation for draw ',i)
+			# if self.parameters['verbose']:
+				# print('Starting observable generation for draw ',i)
 			observable_vector.zero()
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
@@ -165,7 +167,7 @@ class PODProjector:
 				r'Eigenvalues of $\mathbb{E}_{\nu}[qq^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
-	def test_error_bounds(self,ranks = [None],cut_off = 1e-10):
+	def test_output_errors(self,ranks = [None],cut_off = 1e-10):
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
 		if (self.d is None) or (self.U_MV is None):
@@ -193,8 +195,8 @@ class PODProjector:
 			x = [self.u,self.m,None]
 			self.observable.setLinearizationPoint(x)
 			LocalObservables[i].axpy(1.,self.observable.eval(self.m))
-			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-				print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
+			# if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+			# 	print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
 
 		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
 
@@ -283,14 +285,13 @@ class PODProjector:
 	def input_output_error_test(self,V_MV,Cinv = None,rank_pairs = [None],cut_off = 1e-10):
 		# ranks assumed to be python list with sort in place member function
 
+		for (rank_in,rank_out) in rank_pairs:
+			assert rank_in <=V_MV.nvec()
+			assert rank_out <= self.U_MV.nvec()
 		assert self.d is not None
 		assert self.U_MV is not None
-		ranks.sort()
 		# Check to see if the multivectors are large enough
 		# truncate eigenvalues for numerical stability
-
-		numericalrank = np.where(self.d > cut_off)[-1][-1]
-		ranks = ranks[:np.where(ranks < numericalrank)[0][-1]]
 
 		# Instantiate parameter vector for requisite data structures
 		LocalParameters = MultiVector(self.m,self.parameters['sample_per_process'])
@@ -304,15 +305,15 @@ class PODProjector:
 
 		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
+		t0 = time.time()
 		for i in range(LocalObservables.nvec()):
-			t0 = time.time()
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,LocalParameters[i])
 			x = [self.u,LocalParameters[i],None]
 			self.observable.setLinearizationPoint(x)
 			LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
-			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-				print('Generating local parameter and observable ',i,' for POD error test took',time.time() -t0, 's')
+		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+			print('Generating ',LocalObservables.nvec(),' local parameters and observables for POD error test took',time.time() -t0, 's')
 
 		# LocalProjectedObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
 		# LocalProjectedObservables.zero()
@@ -338,28 +339,24 @@ class PODProjector:
 				InputProjectorOperator = LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
 
 			# Define output projector operator for rank_out
-			U_MV = MultiVector(self.U_MV[0],rank)
-			d = self.d[0:rank]
-			for i in range(rank):
+			U_MV = MultiVector(self.U_MV[0],rank_out)
+			for i in range(rank_out):
 				U_MV[i].axpy(1.,self.U_MV[i])
 
 			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-			PODOperator = LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
+			PODOperator = LowRankOperator(np.ones(rank_out),U_MV,init_vector_lambda)
 
 
 			LocalErrors.zero()
 			rel_errors = np.zeros(LocalErrors.nvec())
+			t0 = time.time()
 			for i in range(LocalErrors.nvec()):
-				t0 = time.time()
 				input_projection_vector.zero()
 				output_projection_vector.zero()
 				reduced_q_vector.zero()
-				
 				LocalErrors[i].axpy(1.,LocalObservables[i])
 				denominator = LocalErrors[i].norm('l2')
-
 				InputProjectorOperator.mult(LocalParameters[i],input_projection_vector)
-
 				x = [self.u,input_projection_vector,None]
 				self.observable.setLinearizationPoint(x)
 				reduced_q_vector.axpy(1.,self.observable.eval(input_projection_vector))
@@ -368,16 +365,14 @@ class PODProjector:
 				LocalErrors[i].axpy(-1.,output_projection_vector)
 				numerator = LocalErrors[i].norm('l2')
 				rel_errors[i] = numerator/denominator
-				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
-					print('Local error calculation ',i,' for POD error test took',time.time() -t0, 's')
-					print('numerator for ',i, ' is ', numerator)
-					print('denominator for ', i , ' is ', denominator)
-					print('rel_errors[i] for ',i, ' is ',rel_errors[i])
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
+				print('The ',i,' local error calculations for POD error test took',time.time() -t0, 's')
+
 
 			avg_rel_error = np.mean(rel_errors)
 			global_avg_rel_errors.append(self.collective.allReduce(avg_rel_error,'avg'))
 			if self.mesh_constructor_comm.rank == 0:
-				print('Global average relative error = ',global_avg_rel_errors[-1])
+				print('Rank pair = ',(rank_in,rank_out),'Global average relative error = ',global_avg_rel_errors[-1])
 
 		return global_avg_rel_errors
 

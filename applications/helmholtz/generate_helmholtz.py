@@ -28,16 +28,18 @@ gds = [(1.,5.)]
 # nxnys = [(32,32),(64,64),(96,96),(128,128),(160,160),(192,192)]
 nxnys = [(128,128)]
 # nxnys = [(128,128)]
-frequency = 600
+frequencies = [600,800]
 
 for (gamma,delta) in gds:
 	t0 = time.time()
 	for nx,ny in nxnys:
-		print(80*'#')
-		print(('Running for gd = '+str((gamma,delta))+' nx,ny = '+str((nx,ny))).center(80))
-		os.system('mpirun -n 4 python helmholtz_problem_setup.py -ninstance 4 -gamma '\
-				+str(gamma)+' -delta '+str(delta)+' -nx '+str(nx)+' -ny '+str(ny)+' -frequency '+str(frequency))
-		email_text = 'Finished the data generation job for gamma,delta = '+str((gamma,delta))+' and it took '+str(time.time() - t0)+' s'
-		email_subject = 'Helmholtz data generation'+' gamma,delta = '+str((gamma,delta))
-		message = 'Subject: {}\n\n{}'.format(email_subject, email_text)
-		send_job_update(message)
+		for frequency in frequencies:
+			print(80*'#')
+			print(('Running for gd = '+str((gamma,delta))+' nx,ny = '+str((nx,ny))+' f '+str(frequency)).center(80))
+			os.system('mpirun -n 4 python helmholtz_problem_setup.py -ninstance 4 -gamma '\
+					+str(gamma)+' -delta '+str(delta)+' -nx '+str(nx)+' -ny '+str(ny)+' -frequency '+str(frequency))
+			email_text = 'Finished the data generation job for gamma,delta = '+str((gamma,delta))+' and it took '+str(time.time() - t0)+' s \n'
+			email_text += 'Frequency is '+str(frequency)
+			email_subject = 'Helmholtz data generation'+' gamma,delta = '+str((gamma,delta))
+			message = 'Subject: {}\n\n{}'.format(email_subject, email_text)
+			send_job_update(message)

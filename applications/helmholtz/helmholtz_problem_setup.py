@@ -47,6 +47,9 @@ parser.add_argument('-save_kle',dest = 'save_kle',\
 					required= False,default = 1,help='boolean for saving of KLE projectors',type = int)
 parser.add_argument('-save_two_states',dest = 'save_two_states',\
 					required= False,default = 1,help='boolean for savign solution at mean and draw',type = int)
+parser.add_argument('-save_errors',dest = 'save_errors',\
+					required= False,default = 1,help='boolean for savign solution at mean and draw',type = int)
+
 
 args = parser.parse_args()
 
@@ -106,7 +109,7 @@ if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
-del(AS)
+# del(AS)
 
 # Karhunen-Lo\`{e}ve Expansion
 if args.save_kle:
@@ -119,7 +122,7 @@ if args.save_kle:
 
 	KLE.construct_input_subspace()
 
-del(KLE)
+# del(KLE)
 
 # Proper Orthogonal Decomposition
 if args.save_data or args.save_pod:
@@ -131,10 +134,6 @@ if args.save_data or args.save_pod:
 	POD = PODProjector(observable,prior,\
 		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = POD_parameters)
 
-if args.save_data:
-	print(80*'#')
-	print('Made it to the POD data generation!')
-	POD.generate_training_data(output_directory)
 
 # Save the POD projector 
 if args.save_pod:
@@ -142,6 +141,51 @@ if args.save_pod:
 	print('Building POD projector')
 	POD.parameters['rank'] = args.pod_rank
 	POD.construct_subspace()
+
+# Test Errors
+if args.save_errors:
+	import pickle
+	def save_logger(logger):
+	    with open(output_directory+'error_data.pkl', 'wb+') as f:
+	        pickle.dump(logger, f, pickle.HIGHEST_PROTOCOL)
+	# Error Data
+	error_data = {}
+	input_ranks = [8,16,32,64,128]
+	error_data['input_ranks'] = input_ranks
+	rank_pairs = [(1,1),(2,2),(4,4)] + [(8*i,8*i) for i in range(1,17)]
+	error_data['rank_pairs'] = rank_pairs
+
+	if args.save_as:
+		print(80*'#')
+		print('Testing error for AS input bound'.center(80))
+		error_data['AS_input_errors'] = AS.test_errors(ranks = input_ranks)
+		if args.save_pod:
+			print(80*'#')
+			print('Testing error for AS input-output error bound'.center(80))
+			error_data['as_input_output'] = POD.input_output_error_test(AS.V_GN,Cinv = AS.prior.R, rank_pairs = rank_pairs)
+
+	if args.save_kle:
+		print(80*'#')
+		print('Testing error for KLE input-error bound'.center(80))
+		error_data['KLE_input_errors'] = KLE.test_errors(ranks = input_ranks)
+		if args.save_pod:
+			print(80*'#')
+			print('Testing error for KLE input-output error bound'.center(80))
+			error_data['kle_input_output'] = POD.input_output_error_test(KLE.V_KLE,Cinv = AS.prior.M, rank_pairs = rank_pairs)
+
+	if True and args.save_pod:
+		print(80*'#')
+		print('Testing error for random input-output error bound'.center(80))
+		Omega = KLE.random_input_projector()
+		error_data['random_input_output'] = POD.input_output_error_test(Omega, rank_pairs = rank_pairs)
+
+	save_logger(error_data)
+
+if args.save_data:
+	print(80*'#')
+	print('Made it to the POD data generation!')
+	POD.generate_training_data(output_directory)
+
 
 if args.save_two_states:
 	print(80*'#')

@@ -179,7 +179,6 @@ class ActiveSubspaceProjector:
 			else:
 				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
 			 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
-			self.d_GN_noprior, self.V_GN_noprior = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 
@@ -194,13 +193,6 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
-			if self.d_GN_noprior is not None:
-				np.save(self.parameters['output_directory']+'AS_input_projector_noprior',mv_to_dense(self.V_GN_noprior))
-				np.save(self.parameters['output_directory']+'AS_d_GN_noprior',self.d_GN_noprior)
-				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_noprior_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_GN_noprior,\
-					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
 	def construct_output_subspace(self):
@@ -237,13 +229,11 @@ class ActiveSubspaceProjector:
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
-	def test_error_bounds(self,test_input = True, test_output = True, ranks = [None],cut_off = 1e-8):
+	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
 		if test_input:
-			# Neither test currently makes any sense when the projectors are covariance orthogonal.
-			# assert self.prior_preconditioned == False, 'Input Error tests not implemented for prior preconditioned subspace'
 			# Simple projection test
 			if self.d_GN is None:
 				if self.mesh_constructor_comm.rank == 0:

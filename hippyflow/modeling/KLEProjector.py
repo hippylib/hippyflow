@@ -10,6 +10,7 @@ from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
 from ..utilities.plotting import *
+from .priorPreconditionedProjector import PriorPreconditionedProjector
 
 def KLEParameterList():
 	"""
@@ -17,6 +18,7 @@ def KLEParameterList():
 	"""
 	parameters = {}
 	parameters['sample_per_process'] 	= [100, 'Number of samples per process']
+	parameters['error_test_samples'] 		= [50, 'Number of samples for error test']
 	parameters['rank'] 				 	= [128, 'Rank of subspace']
 	parameters['oversampling'] 		 	= [10, 'Oversampling parameter for randomized algorithms']
 	parameters['verbose']				= [True, 'Boolean for printing']
@@ -68,16 +70,33 @@ class KLEProjector:
 
 		self.parameters = parameters
 
+		self.noise = None
+
+
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.prior.Vh.mesh(), self.collective)
 		print('Consistent partitioning:', consistent_partitioning)
 
 		self.d_KLE = None
 		self.V_KLE = None
+		self.prior_preconditioned = None
+
+	def random_input_projector(self):
+		m_KLE = dl.Vector(self.mesh_constructor_comm)
+		self.prior.M.init_vector(m_KLE,0)
+		Omega = MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
+
+		if self.collective.rank() == 0:
+			parRandom.normal(1.,Omega)
+			Omega.orthogonalize()
+		else:
+			Omega.zero()
+		self.collective.bcast(Omega,root = 0)
+		return Omega
 
 
 
-	def construct_input_subspace(self):
+	def construct_input_subspace(self,prior_preconditioned = True):
 		'''
 		
 		'''
@@ -100,14 +119,14 @@ class KLEProjector:
 
 		self.collective.bcast(Omega,root = 0)
 
-		if True:
+		if prior_preconditioned:
 			self.d_KLE, self.V_KLE = doublePassG(KLE_Operator,\
-		 	self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
-		if False:
+				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
+			self.prior_preconditioned = True
+		else:
 			RsolverOperator = Solver2Operator(self.prior.Rsolver)
 			self.d_KLE, self.V_KLE = doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
-
-		print(self.d_KLE)
+			self.prior_preconditioned = False
 
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print('Construction of input subspace took ',time.time() - t0,'s')
@@ -123,6 +142,78 @@ class KLEProjector:
 				r'Eigenvalues of $C$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
+	def test_errors(self, ranks = [None],cut_off = 1e-12):
+		if self.noise is None:
+			self.noise = dl.Vector(self.mesh_constructor_comm)
+			self.prior.init_vector(self.noise,"noise")
 
+		global_avg_rel_errors_input =  None
+		# ranks assumed to be python list with sort in place member function
+		ranks.sort()
 
+		# Simple projection test
+		if self.d_KLE is None:
+			if self.mesh_constructor_comm.rank == 0:
+				print('Constructing input subspace')
+			self.construct_input_subspace()
+		elif len(self.d_KLE)<ranks[-1]:
+			if self.mesh_constructor_comm.rank == 0:
+				print('Constructing input subspace because larger rank needed.')
+				self.parameters['rank'] = ranks[-1]
+			self.construct_input_subspace()
+		else: 
+			if self.mesh_constructor_comm.rank == 0:
+				print('Input subspace already computed proceeding with error tests')
+		# truncate eigenvalues for numerical stability
+		numericalrank = np.where(self.d_KLE > cut_off)[-1][-1] + 1 # due to 0 indexing
+		ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]# due to inclusion
+		global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
 
+		# Naive test on output space
+		
+		projection_vector = dl.Vector()
+		self.prior.init_vector(projection_vector,0)
+
+		LocalParameters = MultiVector(projection_vector,self.parameters['error_test_samples'])
+		LocalParameters.zero()
+		# Generate samples
+		for i in range(self.parameters['error_test_samples']):
+			t0 = time.time()
+			parRandom.normal(1,self.noise)
+			self.prior.sample(self.noise,LocalParameters[i])
+
+		LocalErrors = MultiVector(projection_vector,self.parameters['error_test_samples'])
+		
+
+		for rank_index,rank in enumerate(ranks):
+			LocalErrors.zero()
+			if rank is None:
+				V_KLE = self.V_KLE
+				d_KLE = self.d_KLE
+			else:
+				V_KLE = MultiVector(self.V_KLE[0],rank)
+				d_KLE = self.d_KLE[0:rank]
+				for i in range(rank):
+					V_KLE[i].axpy(1.,self.V_KLE[i])
+			input_init_vector_lambda = lambda x, dim: self.prior.init_vector(x,dim = 1)
+			if self.prior_preconditioned:
+				InputProjectorOperator = PriorPreconditionedProjector(V_KLE,self.prior.M, input_init_vector_lambda)
+			else:
+				InputProjectorOperator = LowRankOperator(np.ones_like(d_KLE),V_KLE, input_init_vector_lambda)
+		
+			rel_errors = np.zeros(LocalErrors.nvec())
+			for i in range(LocalErrors.nvec()):
+				LocalErrors[i].axpy(1.,LocalParameters[i])
+				denominator = LocalErrors[i].norm('l2')
+				projection_vector.zero()
+				InputProjectorOperator.mult(LocalErrors[i],projection_vector)
+				LocalErrors[i].axpy(-1.,projection_vector)
+				numerator = LocalErrors[i].norm('l2')
+				rel_errors[i] = numerator/denominator
+
+			avg_rel_error = np.mean(rel_errors)
+			global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+			if self.mesh_constructor_comm.rank == 0:
+				print('Naive global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
+
+		return global_avg_rel_errors_input
