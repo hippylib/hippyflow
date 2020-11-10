@@ -1,19 +1,15 @@
-# This file is part of the hIPPYflow package
+# Copyright (c) 2020, The University of Texas at Austin 
+# & Washington University in St. Louis.
 #
-# hIPPYflow is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or any later version.
+# All Rights reserved.
+# See file COPYRIGHT for details.
 #
-# hIPPYflow is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+# This file is part of the hIPPYflow package. For more information see
+# https://github.com/hippylib/hippyflow/
 #
-# You should have received a copy of the GNU General Public License
-# If not, see <http://www.gnu.org/licenses/>.
-#
-# Author: Tom O'Leary-Roseberry
-# Contact: tom.olearyroseberry@utexas.edu
+# hIPPYflow is free software; you can redistribute it and/or modify it under the
+# terms of the GNU General Public License (as published by the Free
+# Software Foundation) version 2.0 dated June 1991.
 
 class CollectiveOperator:
 	def __init__(self, local_op, collective, mpi_op = 'sum'):
