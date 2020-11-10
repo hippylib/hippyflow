@@ -1,0 +1,36 @@
+# This file is part of the hIPPYflow library. 
+#
+# hIPPYflow is free software; you can redistribute it and/or modify it under the
+# terms of the GNU General Public License (as published by the Free
+# Software Foundation) version 2.0 dated June 1991.
+
+COPYRIGHT
+
+The following copyright applies to each file in the hIPPYlib
+distribution, unless otherwise stated in the file:
+
+Copyright (c) 2020-, XXX
+
+LICENSE
+
+hIPPYflow is a free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License (as published by the
+Free Software Foundation) version 2.0 dated June 1991.
+
+hIPPYflow is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the IMPLIED WARRANTY OF
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the terms
+and conditions of the GNU Lesser General Public License for more
+details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with this library (file LICENSE); if not, write to the
+Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301 USA.
+
+
+CONTACT INFORMATION
+
+Tom O'Leary-Roseberry
+
+tom.olearyroseberry@utexas.edu

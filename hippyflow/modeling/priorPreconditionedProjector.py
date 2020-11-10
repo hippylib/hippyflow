@@ -16,8 +16,45 @@
 # Contact: tom.olearyroseberry@utexas.edu
 
 
-from .collectives import *
+from hippylib import *
+import dolfin as dl
+import numpy as np
 
-from .modeling import *
 
-from .utilities import *
+class PriorPreconditionedProjector:
+	"""
+	"""
+	def __init__(self,U,Cinv,my_init_vector):
+		"""
+		"""
+		self.U = U
+		self.Cinv = Cinv
+		self.my_init_vector = my_init_vector
+
+		self.Cinvx = dl.Vector()
+		self.my_init_vector(self.Cinvx,0)
+
+		pass
+
+
+	def init_vector(self,x,dim):
+		"""
+
+		"""
+		self.my_init_vector(x,dim)
+
+
+	def mult(self,x,y):
+		"""
+		
+		"""
+		self.Cinv.mult(x,self.Cinvx)
+		UtCinvx = self.U.dot_v(self.Cinvx)
+		y.zero()
+		self.U.reduce(y,UtCinvx)
+
+
+
+
+
+
