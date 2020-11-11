@@ -18,13 +18,22 @@ import numpy as np
 from mpi4py import MPI
 
 def splitCommunicators(comm_world, n_subdomain, n_instances):
+    """
+    This function takes an MPI comm_world communicator and creates a communicator grid
+    based on both mesh parallelism and sample instance parallelism.
+
+        - :code:`comm_world` - MPI comm world object
+        - :code:`n_subdomain` - integer number of subdomains
+        - :code:`n_instances` - integer number of sampling instances
+
+    Rows correspond to sampling instances
+    Columns correspond to mesh subdomain collectives across samples
+    Color corresponds to row index, and key corresponds to column index
+    """
     mpi_rank = comm_world.rank
     world_size = comm_world.size
     assert world_size == n_subdomain*n_instances
-    # This interprets the communication structure as a grid where rows correspond
-    # to instances and columns correspond to mesh subdomain collectives accross 
-    # different samples. Color corresponds to row index, and key corresponds to 
-    # column index as is customary. 
+
     color = np.floor(mpi_rank/n_subdomain)
     key = np.remainder(mpi_rank,n_subdomain) 
     mesh_constructor_comm = comm_world.Split(color = color,key = key)
@@ -33,6 +42,12 @@ def splitCommunicators(comm_world, n_subdomain, n_instances):
 
 
 def checkFunctionSpaceConsistentPartitioning(Vh, collective):
+    """
+    This function checks consistent partitioning for a function space
+
+        - :code:`Vh` - function space 
+        - :code:`collective` - MPI collective 
+    """
     v = dl.interpolate(dl.Constant(float(Vh.mesh().mpi_comm().rank)),Vh)
     if collective.rank() == 0:
         root_v = dl.interpolate(dl.Constant(float(Vh.mesh().mpi_comm().rank)),Vh)
@@ -46,6 +61,13 @@ def checkFunctionSpaceConsistentPartitioning(Vh, collective):
     return tests_passed_everywhere
 
 def checkMeshConsistentPartitioning(mesh, collective):
+    """
+    This function checks consistent partitioning for a mesh
+
+        - :code:`mesh` - mesh
+        - :code:`collective` - MPI collective 
+    """
+
     V1 = dl.FunctionSpace(mesh,"DG", 0)
     t1 = checkFunctionSpaceConsistentPartitioning(V1 , collective)
     
