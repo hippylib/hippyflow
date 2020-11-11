@@ -13,10 +13,14 @@
 
 import numpy as np
 
-from hippylib import *
+from hippylib import MultiVector
 
 
 def mv_to_dense(multivector):
+    """
+    This function converts a MultiVector object to a numpy array
+        - :code:`multivector` - hippylib MultiVector object
+    """
     multivector_shape = (multivector[0].get_local().shape[0],multivector.nvec())
     as_np_array = np.zeros(multivector_shape)
     for i in range(multivector_shape[-1]):
@@ -27,6 +31,12 @@ def mv_to_dense(multivector):
     return as_np_array
 
 def dense_to_mv(dense_array,dl_vector):
+    """
+    This function converts a numpy array to a MultiVector
+        - :code:`dense_array` - numpy array to be transformed
+        - :code:`dl_vector` - type :code:`dolfin.Vector` object to be used in the 
+            MultiVector object constructor
+    """
     temp = MultiVector(dl_vector,dense_array.shape[-1])
     for i in range(temp.nvec()):
         temp[i].set_local(dense_array[:,i])

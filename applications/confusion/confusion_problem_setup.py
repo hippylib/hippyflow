@@ -28,8 +28,6 @@ from hippylib import *
 sys.path.append( os.environ.get('HIPPYFLOW_PATH'))
 from hippyflow import *
 
-
-from maternPrior import BiLaplacian2D, Laplacian2D
 from confusion_linear_observable import confusion_linear_observable
 
 

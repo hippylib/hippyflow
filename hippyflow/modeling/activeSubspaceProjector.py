@@ -81,7 +81,7 @@ class SummedListOperator:
 class ActiveSubspaceProjector:
 	"""
 	This class implements projectors based on globally averages GN Hessian and inside out GN Hessian
-	We have a forward mapping: :math:`m --> q(m)`
+	We have a forward mapping: :math:`m -> q(m)`
 	And a forward map Jacobian:  :math:`\nabla q(m)`
 	Jacobian SVD: :math:`J = U S V^*`
 	Output active subspace: :math:`J'J = US^2U^*`

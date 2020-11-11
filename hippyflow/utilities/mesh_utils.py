@@ -15,6 +15,12 @@ import dolfin as dl
 
 
 def read_serial_write_parallel_mesh(mesh_file,verbose = True):
+	"""
+	This function reads an XDMF mesh file in serial and writes 
+	it to be partitioned in parallel
+		- :code:`mesh_file` - The file to be read
+		- :code:`verbose` - Boolean for printing
+	"""
 	world_size = dl.MPI.comm_world.size
 	mesh=dl.Mesh()
 	with dl.XDMFFile(mesh_file, 'r') as fid:
