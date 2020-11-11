@@ -30,7 +30,7 @@ from .priorPreconditionedProjector import PriorPreconditionedProjector
 
 def ActiveSubspaceParameterList():
 	"""
-
+	This function implements a parameter list for the ActiveSubspaceProjector
 	"""
 	parameters = {}
 	parameters['samples_per_process'] 		= [64, 'Number of samples per process']
@@ -81,13 +81,21 @@ class SummedListOperator:
 class ActiveSubspaceProjector:
 	"""
 	This class implements projectors based on globally averages GN Hessian and inside out GN Hessian
-	We have a forward mapping: m --> q(m)
-	And a forward map Jacobian:  math:: \nabla q(m)
-	Jacobian SVD: J = U S V'
-	Output active subspace: J'J = US^2U'
-	Input active subspace: JJ' = VS^2V'
+	We have a forward mapping: :math:`m --> q(m)`
+	And a forward map Jacobian:  :math:`\nabla q(m)`
+	Jacobian SVD: :math:`J = U S V^*`
+	Output active subspace: :math:`J'J = US^2U^*`
+	Input active subspace: :math:`JJ' = VS^2V^*`
 	"""
 	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
+		"""
+		Constructor
+			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
+			- :code:`prior` - object that implements the prior
+			- :code:`mesh_constructor_comm` - MPI communicator that is used in mesh construction
+			- :code:`collective` - MPI collective used in parallel collective operations
+			- :code:`parameters` - parameter dictionary
+		"""
 		self.parameters = parameters
 		if self.parameters['verbose']:
 			print(80*'#')
@@ -145,6 +153,9 @@ class ActiveSubspaceProjector:
 
 
 	def initialize_samples(self):
+		"""
+		This method initializes the samples from the prior used in sampling
+		"""
 		for u,m,observable in zip(self.us,self.ms,self.observables):
 			self.noise.zero()
 			parRandom.normal(1,self.noise)
@@ -163,6 +174,11 @@ class ActiveSubspaceProjector:
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
+		"""
+		This method implements the input subspace constructor 
+			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
+				The default parameter is True which is customary in active subspace construction
+		"""
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed input subspace'.center(80))
@@ -210,6 +226,9 @@ class ActiveSubspaceProjector:
 
 
 	def construct_output_subspace(self):
+		"""
+		This method implements the output subspace constructor 
+		"""
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed output subspace'.center(80))
@@ -244,6 +263,13 @@ class ActiveSubspaceProjector:
 
 
 	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):
+		"""
+		This method implements an error test
+			- :code:`test_input` - a Boolean for whether input tests are executed
+			- :code:`test_output` - a Boolean for whether output tests are executed
+			- :code:`ranks` - a python list of integers specifying ranks for projection tests
+			- :code:`cut_off` - Where to truncate the ranks based on eigenvalue decay
+		"""
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
@@ -501,9 +527,3 @@ class ActiveSubspaceProjector:
 
 		return [global_avg_rel_errors_input,global_avg_rel_errors_output]
 			
-
-	# def save_asnp(filename = 'AS_basis'):
-	# 	if int(dl.MPI.COMM_WORLD.rank) == 0:
-	# 		print('Just on one process, we are saving')
-	# 		np.save(mv_to_dense(self.U_MV),filename)
-	# 		print('Save was successful')

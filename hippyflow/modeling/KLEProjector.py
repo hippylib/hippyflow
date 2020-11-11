@@ -27,7 +27,7 @@ from .priorPreconditionedProjector import PriorPreconditionedProjector
 
 def KLEParameterList():
 	"""
-
+	This function implements the parameter list for the KLE object
 	"""
 	parameters = {}
 	parameters['sample_per_process'] 	= [100, 'Number of samples per process']
@@ -65,10 +65,16 @@ class MRinvM:
 class KLEProjector:
 	"""
 	This class implements an input subspace projector based solely on the prior
-	
 	"""
 	def __init__(self, prior, mesh_constructor_comm = None ,collective = None, parameters = KLEParameterList()):
-
+		"""
+		Constructor
+			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
+			- :code:`prior` - object that implements the prior
+			- :code:`mesh_constructor_comm` - MPI communicator that is used in mesh construction
+			- :code:`collective` - MPI collective used in parallel collective operations
+			- :code:`parameters` - parameter dictionary
+		"""
 		self.prior = prior
 		if mesh_constructor_comm is not None:
 			self.mesh_constructor_comm = mesh_constructor_comm
@@ -92,9 +98,12 @@ class KLEProjector:
 
 		self.d_KLE = None
 		self.V_KLE = None
-		self.prior_preconditioned = None
+		self.M_orthogonal = None
 
 	def random_input_projector(self):
+		"""
+		This method computes and returns a random projection basis
+		"""
 		m_KLE = dl.Vector(self.mesh_constructor_comm)
 		self.prior.M.init_vector(m_KLE,0)
 		Omega = MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
@@ -109,10 +118,11 @@ class KLEProjector:
 
 
 
-	def construct_input_subspace(self,prior_preconditioned = True):
-		'''
-		
-		'''
+	def construct_input_subspace(self,M_orthogonal = True):
+		"""
+		This method computes the KLE subspace
+			- :code:`M_orthogonal` - Boolean about whether the vectors are made to be mass matrix orthogonal
+		"""
 		t0 = time.time()
 		assert hasattr(self.prior,'Rsolver') and hasattr(self.prior,'M') and hasattr(self.prior,'Msolver')
 
@@ -132,14 +142,14 @@ class KLEProjector:
 
 		self.collective.bcast(Omega,root = 0)
 
-		if prior_preconditioned:
+		if M_orthogonal:
 			self.d_KLE, self.V_KLE = doublePassG(KLE_Operator,\
 				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
-			self.prior_preconditioned = True
+			self.M_orthogonal = True
 		else:
 			RsolverOperator = Solver2Operator(self.prior.Rsolver)
 			self.d_KLE, self.V_KLE = doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
-			self.prior_preconditioned = False
+			self.M_orthogonal = False
 
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print('Construction of input subspace took ',time.time() - t0,'s')
@@ -156,6 +166,11 @@ class KLEProjector:
 
 
 	def test_errors(self, ranks = [None],cut_off = 1e-12):
+		"""
+		This method implements projection error tests for the KLE basis
+			-:code:`ranks` - a python list of ints specifying the ranks for the projection error tests
+			-:code:`cut_off` - where to truncate the ranks based on the spectral decay of KLE
+		"""
 		if self.noise is None:
 			self.noise = dl.Vector(self.mesh_constructor_comm)
 			self.prior.init_vector(self.noise,"noise")
@@ -209,7 +224,7 @@ class KLEProjector:
 				for i in range(rank):
 					V_KLE[i].axpy(1.,self.V_KLE[i])
 			input_init_vector_lambda = lambda x, dim: self.prior.init_vector(x,dim = 1)
-			if self.prior_preconditioned:
+			if self.M_orthogonal:
 				InputProjectorOperator = PriorPreconditionedProjector(V_KLE,self.prior.M, input_init_vector_lambda)
 			else:
 				InputProjectorOperator = LowRankOperator(np.ones_like(d_KLE),V_KLE, input_init_vector_lambda)

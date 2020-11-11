@@ -139,30 +139,56 @@ class ObservableJacobian:
 
 
 class JTJ:
+    """
+    This class implements the operator :math:`J^TJ` given a Jacobian :math:`J`
+    """
     def __init__(self,J):
+        """
+        Constructor
+            - :code:`J` - Jacobian object, assumed to be of of type :code:`hippyflow.modeling.Jacobian`
+        """
         self.J = J
         self.vector_help = dl.Vector(self.J.mpi_comm())
         self.J.init_vector(self.vector_help,0)
 
     def mult(self,x,y):
+        """
+        Compute :math:`y = J^TJ x `
+        """
         self.J.mult(x,self.vector_help)
         self.J.transpmult(self.vector_help,y)
 
     def init_vector(self,x,dim=None):
+        """
+        Initialize :code:`x` to be compatible with the range (:code:`dim=0`) or domain (:code:`dim=1`) of :code:`JTJ`.
+        """
         self.J.init_vector(x,1)
 
 
 class JJT:
+    """
+    This class implements the operator :math:`JJ^T` given a Jacobian :math:`J`
+    """
     def __init__(self,J):
+        """
+        Constructor
+            - :code:`J` - Jacobian object, assumed to be of of type :code:`hippyflow.modeling.Jacobian`
+        """
         self.J = J
         self.vector_help = dl.Vector(self.J.mpi_comm())
         self.J.init_vector(self.vector_help,1)
 
     def mult(self,x,y):
+        """
+        Compute :math:`y = JJ^T x `
+        """
         self.J.transpmult(x,self.vector_help)
         self.J.mult(self.vector_help,y)
 
     def init_vector(self,x,dim = None):
+        """
+        Initialize :code:`x` to be compatible with the range (:code:`dim=0`) or domain (:code:`dim=1`) of :code:`JJ^`.
+        """
         self.J.init_vector(x,0)
 
 

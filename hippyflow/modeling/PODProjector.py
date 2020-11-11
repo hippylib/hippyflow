@@ -27,7 +27,7 @@ from .priorPreconditionedProjector import PriorPreconditionedProjector
 
 def PODParameterList():
 	"""
-
+	This function returns a parameter list for the POD object
 	"""
 	parameters = {}
 	parameters['sample_per_process'] = [100, 'Number of samples per process']
@@ -45,10 +45,16 @@ def PODParameterList():
 class PODProjector:
 	"""
 	Projector class based on proper orthogonal decomposition
-
 	"""
 	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = PODParameterList()):
-
+		"""
+		Constructor
+			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
+			- :code:`prior` - object that implements the prior
+			- :code:`mesh_constructor_comm` - MPI communicator that is used in mesh construction
+			- :code:`collective` - MPI collective used in parallel collective operations
+			- :code:`parameters` - parameter dictionary
+		"""
 		self.observable = observable
 		self.prior = prior
 		if mesh_constructor_comm is not None:
@@ -81,12 +87,22 @@ class PODProjector:
 		self.u_at_mean = None
 
 	def solve_at_mean(self):
+		"""
+		Solve the PDE at the mean
+		"""
 		m_mean = self.prior.mean
 		self.u_at_mean = self.observable.problem.generate_state()
 		self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
 
 	def generate_training_data(self,output_directory = 'data/',check_for_data = True):
+		"""
+		This method generates training data
+			- :code:`output_directory` - a string specifying the path to the directory where data
+			will be saved
+			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
+			data already exists in directory specified by :code:`output_directory`.
+		"""
 		self.solve_at_mean()
 		my_rank = int(self.collective.rank())
 		try:
@@ -129,6 +145,9 @@ class PODProjector:
 
 
 	def construct_subspace(self):
+		"""
+		This method constructs the POD subspace
+		"""
 		t0 = time.time()
 		self.solve_at_mean()
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
@@ -181,7 +200,11 @@ class PODProjector:
 
 
 	def test_output_errors(self,ranks = [None],cut_off = 1e-10):
-		# ranks assumed to be python list with sort in place member function
+		"""
+		This method performs a simple projection error test on the output
+			- :code:`ranks` - a python list of integers specifying ranks for projection tests
+			- :code:`cut_off` - where to truncate the ranks based on the spectral decay of the POD operator
+		"""
 		ranks.sort()
 		if (self.d is None) or (self.U_MV is None):
 			if self.mesh_constructor_comm.rank == 0:
@@ -257,8 +280,9 @@ class PODProjector:
 
 
 	def two_state_solution(self):
-		# Solve the problem at the mean and save the mean field and velocity to file
-		# Solve for u at the mean
+		"""
+		Solve the problem at the mean and save the mean field and velocity to file
+		"""
 		save_states_dir = self.parameters['output_directory']+'two_states/'
 		os.makedirs(save_states_dir,exist_ok = True)
 		m_mean = self.prior.mean
@@ -295,9 +319,15 @@ class PODProjector:
 
 
 
-	def input_output_error_test(self,V_MV,Cinv = None,rank_pairs = [None],cut_off = 1e-10):
-		# ranks assumed to be python list with sort in place member function
-
+	def input_output_error_test(self,V_MV,Cinv = None,rank_pairs = [None]):
+		"""
+		This method implements an input output projection error test
+		The output projection basis is given by the POD eigenvectors
+			- :code:`V_MV` - a multi vector object of the low rank basis used in the projector
+			- :code:`Cinv` - the covariance inverse which may be used in a prior preconditioned projector
+			- :code:`rank_pairs` - a python list of 2-tuples of ints specifying the input and output ranks 
+				to be used in the projection error test.
+		"""
 		for (rank_in,rank_out) in rank_pairs:
 			assert rank_in <=V_MV.nvec()
 			assert rank_out <= self.U_MV.nvec()
