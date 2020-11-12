@@ -48,6 +48,6 @@ When using second order optimizers, the code assumes that the environmental vari
 
 * `export HESSIANLEARN_PATH=path/to/hessianlearn`
 
-* In some cases (such as on Unix clusters) the dependencies for `hIPPYlib` and `tensorflow` clash. In this case different conda environments may be needed for the data generation phase and the neural network training phase. These two phases can be easily de-coupled in this case. 
+In some cases (such as on Unix clusters) the dependencies for `hIPPYlib` and `tensorflow` clash. In this case different conda environments may be needed for the data generation phase and the neural network training phase. These two phases can be easily de-coupled in this case. 
 
-* On Mac, there has been no issue creating a singular conda environment to handle all dependencies.
+On Mac, there has been no issue creating a singular conda environment to handle all dependencies.
