@@ -168,8 +168,8 @@ if args.save_pod:
 # Test Errors
 if args.save_errors:
 	import pickle
-	def save_logger(logger):
-	    with open(output_directory+'error_data.pkl', 'wb+') as f:
+	def save_logger(logger,filename = 'error_data.pkl'):
+	    with open(output_directory+filename, 'wb+') as f:
 	        pickle.dump(logger, f, pickle.HIGHEST_PROTOCOL)
 	# Error Data
 	error_data = {}
@@ -219,6 +219,7 @@ if args.save_two_states:
 
 
 
-
+if True:
+	save_logger(metadata,filename='metadata.pkl')
 
 

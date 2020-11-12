@@ -196,7 +196,9 @@ if args.save_two_states:
 
 
 if True:
-	
+	save_logger(metadata,filename='metadata.pkl')
+
+
 
 
 
