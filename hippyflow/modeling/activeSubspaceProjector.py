@@ -213,8 +213,9 @@ class ActiveSubspaceProjector:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 
 		self.prior_preconditioned = prior_preconditioned
+		self._input_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
-			print(('Input subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
+			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
 		if True and MPI.COMM_WORLD.rank == 0:
 			np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
 			np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
@@ -250,8 +251,9 @@ class ActiveSubspaceProjector:
 
 		self.collective.bcast(Omega,root = 0)
 		self.d_NG, self.U_NG = doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
+		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
-			print(('Output subspace construction took '+str(time.time() - t0)[:5]+' s').center(80))
+			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
 		if True and MPI.COMM_WORLD.rank == 0:
 			np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
 			np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
@@ -271,6 +273,7 @@ class ActiveSubspaceProjector:
 			- :code:`cut_off` - Where to truncate the ranks based on eigenvalue decay
 		"""
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
+		global_std_rel_errors_input, global_std_rel_errors_output = None, None
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
 		if test_input:
@@ -290,7 +293,8 @@ class ActiveSubspaceProjector:
 			# truncate eigenvalues for numerical stability
 			numericalrank = np.where(self.d_GN > cut_off)[-1][-1] + 1 # due to 0 indexing
 			ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]# due to inclusion
-			global_avg_rel_errors_output = np.ones_like(ranks,dtype = np.float64)
+			global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
+			global_std_rel_errors_input = np.zeros_like(ranks,dtype = np.float64)
 
 			# Naive test on output space
 			LocalParameters = MultiVector(self.ms[0],self.parameters['error_test_samples'])
@@ -331,9 +335,11 @@ class ActiveSubspaceProjector:
 					rel_errors[i] = numerator/denominator
 
 				avg_rel_error = np.mean(rel_errors)
-				global_avg_rel_errors_output[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+				std_rel_error_squared = np.std(rel_errors)**2
+				global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+				global_avg_rel_errors_input[rank_index] = np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg'))
 				if self.mesh_constructor_comm.rank == 0:
-					print('Naive global average relative error input = ',global_avg_rel_errors_output[rank_index],' for rank ',rank)
+					print('Naive global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
 
 			# Double Loop MC Error test does not work when prior preconditioning is used.
 			# This will be fixed soon.
@@ -356,7 +362,8 @@ class ActiveSubspaceProjector:
 					ranks = ranks+[numericalrank]
 				else:
 					ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]
-				global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
+				double_loop_global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
+				double_loop_global_std_rel_errors_input = np.zeros_like(ranks,dtype = np.float64)
 
 				# Double loop MC error approximation
 				# Instantiate input and output data arrays
@@ -448,11 +455,13 @@ class ActiveSubspaceProjector:
 								print('denominator = ',denominator)
 
 					avg_rel_error = np.mean(rel_errors)
-					print('avg_rel_error = ',avg_rel_error)
-
-					global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+					std_rel_error_squared = np.std(rel_errors)**2
+					double_loop_global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+					double_loop_global_std_rel_errors_input[rank_index] = np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg'))
 					if self.mesh_constructor_comm.rank == 0:
-						print('Double loop MC global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
+						print('Double loop MC global average relative error input = ',double_loop_global_avg_rel_errors_input[rank_index],' for rank ',rank)
+					self._double_loop_errors = double_loop_global_avg_rel_errors_input
+					self._double_loop_stds = double_loop_global_std_rel_errors_input
 
 
 		if test_output:
@@ -472,6 +481,7 @@ class ActiveSubspaceProjector:
 			numericalrank = np.where(self.d_NG > cut_off)[-1][-1] + 1 # due to 0 indexing
 			ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]# due to inclusion
 			global_avg_rel_errors_output = np.ones_like(ranks,dtype = np.float64)
+			global_std_rel_errors_output = np.zeros_like(ranks,dtype = np.float64)
 			# Naive test on output space
 			observable_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(observable_vector,dim = 0)
@@ -515,7 +525,9 @@ class ActiveSubspaceProjector:
 					rel_errors[i] = numerator/denominator
 
 				avg_rel_error = np.mean(rel_errors)
+				std_rel_error_squared = np.std(rel_errors)**2
 				global_avg_rel_errors_output[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+				global_std_rel_errors_output[rank_index] = np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg'))
 				if self.mesh_constructor_comm.rank == 0:
 					print('Global average relative error output = ',global_avg_rel_errors_output[rank_index],' for rank ',rank)
 
@@ -525,5 +537,5 @@ class ActiveSubspaceProjector:
 			print("[world rank {:d}] ".format(MPI.COMM_WORLD.rank)+"[mesh rank {:d}] ".format(self.mesh_constructor_comm.rank)+\
 			"[sample rank {:d}] ".format(self.collective.rank())+ '|| d_GN_avg - d_NG_avg ||  = ' + str(np.linalg.norm(spectral_error)))
 
-		return [global_avg_rel_errors_input,global_avg_rel_errors_output]
+		return [global_avg_rel_errors_input, global_std_rel_errors_input], [global_avg_rel_errors_output, global_std_rel_errors_output]
 			

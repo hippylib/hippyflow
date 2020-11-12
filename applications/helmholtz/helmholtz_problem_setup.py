@@ -108,6 +108,10 @@ if args.use_laplace_prior:
 else:
 	prior = BiLaplacian2D(observable.problem.Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
 
+
+
+metadata = {}
+
 # Active Subspace
 if args.save_as:
 	AS_parameters = ActiveSubspaceParameterList()
@@ -121,6 +125,9 @@ if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
+	metadata['as_input_time'] = AS._input_subspace_construction_time
+	metadata['as_output_time'] = AS._output_subspace_construction_time
+
 # del(AS)
 
 # Karhunen-Lo\`{e}ve Expansion
@@ -133,6 +140,8 @@ if args.save_kle:
 		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = KLE_parameters)
 
 	KLE.construct_input_subspace()
+
+	metadata['kle_time'] = KLE._subspace_construction_time
 
 # del(KLE)
 
@@ -154,6 +163,8 @@ if args.save_pod:
 	POD.parameters['rank'] = args.pod_rank
 	POD.construct_subspace()
 
+	metadata['pod_time'] = POD._subspace_construction_time
+
 # Test Errors
 if args.save_errors:
 	import pickle
@@ -170,7 +181,7 @@ if args.save_errors:
 	if args.save_as:
 		print(80*'#')
 		print('Testing error for AS input bound'.center(80))
-		error_data['AS_input_errors'] = AS.test_errors(ranks = input_ranks)
+		error_data['AS_input_errors'],error_data['AS_output_errors'] = AS.test_errors(ranks = input_ranks)
 		if args.save_pod:
 			print(80*'#')
 			print('Testing error for AS input-output error bound'.center(80))
@@ -197,6 +208,8 @@ if args.save_data:
 	print(80*'#')
 	print('Made it to the POD data generation!')
 	POD.generate_training_data(output_directory)
+
+	metadata['data_time'] = POD._data_generation_time
 
 
 if args.save_two_states:

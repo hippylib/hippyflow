@@ -86,7 +86,7 @@ observable = confusion_linear_observable(mesh,**observable_kwargs)
 Vh = observable.problem.Vh
 prior = BiLaplacian2D(Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
 
-
+metadata = {}
 
 
 # Active Subspace
@@ -101,6 +101,9 @@ if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
+	metadata['as_input_time'] = AS._input_subspace_construction_time
+	metadata['as_output_time'] = AS._output_subspace_construction_time
+
 # Karhunen-Lo\`{e}ve Expansion
 if args.save_kle:
 
@@ -110,6 +113,8 @@ if args.save_kle:
 	KLE = KLEProjector(prior,\
 		mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = KLE_parameters)
 	KLE.construct_input_subspace()
+
+	metadata['kle_time'] = KLE._subspace_construction_time
 	
 
 
@@ -130,12 +135,14 @@ if args.save_pod:
 	POD.parameters['rank'] = args.pod_rank
 	POD.construct_subspace()
 
+	metadata['pod_time'] = POD._subspace_construction_time
+
 
 # Test Errors
 if args.save_errors:
 	import pickle
-	def save_logger(logger):
-	    with open(output_directory+'error_data.pkl', 'wb+') as f:
+	def save_logger(logger,filename = 'error_data.pkl'):
+	    with open(output_directory+filename, 'wb+') as f:
 	        pickle.dump(logger, f, pickle.HIGHEST_PROTOCOL)
 	# Error Data
 	error_data = {}
@@ -149,7 +156,8 @@ if args.save_errors:
 	if args.save_as:
 		print(80*'#')
 		print('Testing error for AS input bound'.center(80))
-		error_data['AS_input_errors'] = AS.test_errors(ranks = input_ranks)
+
+		error_data['AS_input_errors'], error_data['AS_output_errors'] = AS.test_errors(ranks = input_ranks)
 		if args.save_pod:
 			print(80*'#')
 			print('Testing error for AS input-output error bound'.center(80))
@@ -179,11 +187,16 @@ if args.save_data:
 	print('Made it to the POD data generation!')
 	POD.generate_training_data(output_directory)
 
+	metadata['data_time'] = POD._data_generation_time
+
 if args.save_two_states:
 	print(80*'#')
 	print('Saving two states')
 	POD.two_state_solution()
 
+
+if True:
+	
 
 
 

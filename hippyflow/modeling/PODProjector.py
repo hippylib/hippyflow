@@ -142,6 +142,7 @@ class PODProjector:
 			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
 			if self.parameters['verbose']:
 				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
+		self._data_generation_time = time.time() - t0
 
 
 	def construct_subspace(self):
@@ -186,8 +187,10 @@ class PODProjector:
 		self.collective.bcast(Omega_POD,root = 0)
 
 		self.d, self.U_MV = doublePass(GlobalPODOperator,Omega_POD,self.parameters['rank'],s = 1)
+
+		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):
-			print('Construction of POD subspace took ', time.time() - t0,'s')
+			print('Construction of POD subspace took ', self._subspace_construction_time,'s')
 
 		if True and MPI.COMM_WORLD.rank == 0:
 			np.save(self.parameters['output_directory']+'POD_projector',mv_to_dense(self.U_MV))
@@ -239,6 +242,7 @@ class PODProjector:
 		projection_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(projection_vector,dim = 0)
 		global_avg_rel_errors = []
+		global_std_rel_errors = []
 		for rank in ranks:
 			LocalErrors.zero()
 			if rank is None:
@@ -272,11 +276,13 @@ class PODProjector:
 					print('rel_errors[i] for ',i, ' is ',rel_errors[i])
 
 			avg_rel_error = np.mean(rel_errors)
+			std_rel_error_squared = np.std(rel_errors)**2
 			global_avg_rel_errors.append(self.collective.allReduce(avg_rel_error,'avg'))
+			global_std_rel_errors.append(np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg')))
 			if self.mesh_constructor_comm.rank == 0:
 				print('Global average relative error = ',global_avg_rel_errors[-1])
 
-		return global_avg_rel_errors
+		return global_avg_rel_errors, global_std_rel_errors
 
 
 	def two_state_solution(self):
@@ -370,6 +376,7 @@ class PODProjector:
 		self.observable.init_vector(reduced_q_vector,dim = 0)
 
 		global_avg_rel_errors = []
+		global_std_rel_errors = []
 		for (rank_in,rank_out) in rank_pairs:
 			# Define input projector operator for rank_in
 			V_r = MultiVector(V_MV[0],rank_in)
@@ -413,11 +420,13 @@ class PODProjector:
 
 
 			avg_rel_error = np.mean(rel_errors)
+			std_rel_error_squared = np.std(rel_errors)**2
 			global_avg_rel_errors.append(self.collective.allReduce(avg_rel_error,'avg'))
+			global_std_rel_errors.append(np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg')))
 			if self.mesh_constructor_comm.rank == 0:
 				print('Rank pair = ',(rank_in,rank_out),'Global average relative error = ',global_avg_rel_errors[-1])
 
-		return global_avg_rel_errors
+		return global_avg_rel_errors, global_std_rel_errors
 
 
 

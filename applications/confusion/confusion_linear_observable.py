@@ -26,9 +26,6 @@ from hippyflow import LinearStateObservable
 
 def confusion_linear_observable(mesh,sqrt_n_obs = 10,output_folder ='confusion_setup/',\
 									 verbose = False,seed = 0):
-	'''
-
-	'''
 	class confusion_varf:
 		def __init__(self,Vh,save_fields = False,output_folder = 'confusion_setup/'):
 			'''
@@ -52,9 +49,6 @@ def confusion_linear_observable(mesh,sqrt_n_obs = 10,output_folder ='confusion_s
 
 
 		def computeVelocityField(self,mesh):
-			'''
-
-			'''
 			def v_boundary(x,on_boundary):
 				return on_boundary
 
@@ -110,10 +104,6 @@ def confusion_linear_observable(mesh,sqrt_n_obs = 10,output_folder ='confusion_s
 
 
 	def u_boundary(x, on_boundary):
-		'''
-
-		'''
-		# return on_boundary and x[0] < dl.DOLFIN_EPS
 		return on_boundary
 
 	########################################################################
@@ -135,10 +125,6 @@ def confusion_linear_observable(mesh,sqrt_n_obs = 10,output_folder ='confusion_s
 		for yi in y_targets:
 			targets.append((xi,yi))
 	targets = np.array(targets)
-	# np.random.seed(seed=seed)
-	# x_targets = np.random.uniform(0.6,0.8, n_obs)
-	# y_targets = np.random.uniform(0.6,0.8, n_obs)
-	# targets = np.array(list(zip(x_targets,y_targets)))
 	if verbose:
 		print( "Number of observation points: {0}".format(targets.shape[0]) )
 

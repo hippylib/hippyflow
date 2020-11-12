@@ -43,7 +43,7 @@ def KLEParameterList():
 
 class MRinvM:
 	"""
-	MRinvM implements the action of :math: `MR^{-1}M` for a BiLaplacianPrior
+	MRinvM implements the action of :math:`MR^{-1}M` for a BiLaplacianPrior
 	"""
 
 	def __init__(self,Rsolver,M):
@@ -151,8 +151,9 @@ class KLEProjector:
 			self.d_KLE, self.V_KLE = doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = False
 
+		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
-			print('Construction of input subspace took ',time.time() - t0,'s')
+			print('Construction of input subspace took ',self._subspace_construction_time,'s')
 			# print('Input subspace eigenvalues = ',self.d_GN)
 
 		if True and MPI.COMM_WORLD.rank == 0:
@@ -175,7 +176,6 @@ class KLEProjector:
 			self.noise = dl.Vector(self.mesh_constructor_comm)
 			self.prior.init_vector(self.noise,"noise")
 
-		global_avg_rel_errors_input =  None
 		# ranks assumed to be python list with sort in place member function
 		ranks.sort()
 
@@ -195,10 +195,10 @@ class KLEProjector:
 		# truncate eigenvalues for numerical stability
 		numericalrank = np.where(self.d_KLE > cut_off)[-1][-1] + 1 # due to 0 indexing
 		ranks = ranks[:np.where(ranks <= numericalrank)[0][-1]+1]# due to inclusion
-		global_avg_rel_errors_input = np.ones_like(ranks,dtype = np.float64)
+		global_avg_rel_errors = np.ones_like(ranks,dtype = np.float64)
+		global_std_rel_errors = np.zeros_like(ranks,dtype = np.float64)
 
-		# Naive test on output space
-		
+		# Naive test on input space
 		projection_vector = dl.Vector()
 		self.prior.init_vector(projection_vector,0)
 
@@ -240,8 +240,10 @@ class KLEProjector:
 				rel_errors[i] = numerator/denominator
 
 			avg_rel_error = np.mean(rel_errors)
-			global_avg_rel_errors_input[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+			std_rel_error_squared = np.std(rel_errors)**2
+			global_avg_rel_errors[rank_index] = self.collective.allReduce(avg_rel_error,'avg')
+			global_std_rel_errors[rank_index] = np.sqrt(self.collective.allReduce(std_rel_error_squared,'avg'))
 			if self.mesh_constructor_comm.rank == 0:
-				print('Naive global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
+				print('Naive global average relative error input = ',global_avg_rel_errors[rank_index],' for rank ',rank)
 
-		return global_avg_rel_errors_input
+		return global_avg_rel_errors, global_std_rel_errors
