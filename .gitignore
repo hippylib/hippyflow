@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# My custom ignores
+*logging*
+*.DS_Store*
+
 # C extensions
 *.so
 
