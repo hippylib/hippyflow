@@ -274,7 +274,7 @@ for nx in [64,128]:
 	# Save 
 	architecture = args.architecture
 	assert architecture in ['generic_dense','generic_linear','kle_projected_dense',\
-			'as_projected_dense','random_projected_dense','low_rank_linear','frozen_low_rank_linear']
+			'as_projected_dense','random_projected_dense','low_rank_linear']
 	if 'projected' in architecture:
 		architecture += '_'+str(args.fixed_input_rank)+'-'+str(args.fixed_output_rank)
 
