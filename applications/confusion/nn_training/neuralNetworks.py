@@ -98,10 +98,10 @@ def projected_dense(input_projector,output_projector,intermediate_layers = 1,\
 	output_dim, reduced_output_dim = output_projector.shape
 	input_data = tf.keras.layers.Input(shape=(input_dim,))
 	input_proj_layer = tf.keras.layers.Dense(reduced_input_dim,name = 'input_proj_layer',use_bias = False)(input_data)
-	input_proj_layer = BiasLayer()(input_proj_layer)
-	z =  tf.keras.layers.Dense(reduced_input_dim,activation = 'softplus')(input_proj_layer)
+	input_proj_layer = BiasLayer(name = 'input_bias_layer')(input_proj_layer)
+	z =  tf.keras.layers.Dense(reduced_input_dim,activation = 'softplus',name='dense_reduction_layer')(input_proj_layer)
 	for i in range(intermediate_layers):
-		z = tf.keras.layers.Dense(reduced_output_dim,activation = 'softplus')(z)
+		z = tf.keras.layers.Dense(reduced_output_dim,activation = 'softplus',name = 'inner_layer_'+str(i))(z)
 	output_layer = tf.keras.layers.Dense(output_dim,name = 'output_layer')(z)
 
 	regressor = tf.keras.models.Model(input_data,output_layer)

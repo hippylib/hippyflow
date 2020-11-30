@@ -59,6 +59,7 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 	# 	sources_loc.append( dl.Point(xi, box[3]-0.15) )
 
 	source_loc_ = ((box[0]+.1+(box[2]-0.1)/2)/2,box[3]-0.15)
+
 	
 	sources_loc = [dl.Point(*source_loc_)]
 	
@@ -78,12 +79,6 @@ def helmholtz_linear_observable(mesh,box = None, box_pml = None, sqrt_n_obs = 10
 		for yi in y_targets:
 			targets.append((xi,yi))
 	targets = np.array(targets)
-
-
-	# np.random.seed(seed=1)
-	# targets = np.zeros([ntargets, ndim] )
-	# targets[:,0]  = np.linspace(box[0]+.1, (box[2]-.1)/2, ntargets)
-	# targets[:,1]  = box[3]-.1
 	
 	ntargets = len(targets)
 	# if rank == 0:
