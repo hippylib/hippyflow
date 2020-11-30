@@ -47,7 +47,7 @@ parser.add_argument('-formulation',dest = 'formulation',required=False,default =
 parser.add_argument('-use_laplace_prior',dest = 'use_laplace_prior',\
 					required= False,default = 0,help='boolean for saving of data',type = int)
 
-parser.add_argument('-frequency',dest = 'frequency',required=False,default = 300, help="formulation name string",type=int)
+parser.add_argument('-frequency',dest = 'frequency',required=False,default = 600, help="formulation name string",type=int)
 
 parser.add_argument('-save_data',dest = 'save_data',\
 					required= False,default = 1,help='boolean for saving of data',type = int)

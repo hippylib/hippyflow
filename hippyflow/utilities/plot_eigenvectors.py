@@ -135,13 +135,16 @@ def plot_pts(points, values, colorbar=True, subplot_loc=None, mytitle=None, show
 
 
 
-def plot_eigenvector(Vh, U, mytitle, which = 0, cmap = None,outname = 'eigenvectors.pdf'):
+def plot_eigenvector(Vh, U, mytitle = None, which = 0, cmap = None,colorbar = True,outname = 'eigenvectors.pdf'):
     """
     Plot specified vectors in a :code:MultiVector
     """
     plt.figure(figsize= (9,6.5) )
-    
-    title_stamp = mytitle + " {0}" 
+
+    if mytitle is None:
+        title_stamp = None
+    else:
+        title_stamp = (mytitle + " {0}" ).format(which + 1)
     u = dl.Function(Vh)
 
     assert which < U.nvec()
@@ -151,8 +154,10 @@ def plot_eigenvector(Vh, U, mytitle, which = 0, cmap = None,outname = 'eigenvect
         s = -1./U[which].norm("linf")
     u.vector().zero()
     u.vector().axpy(s, U[which])
-    plot(u, mytitle=title_stamp.format(which+1), vmin=-1, vmax=1, cmap = cmap)
+    pp = plot(u, colorbar = colorbar, mytitle=title_stamp, vmin=-1, vmax=1, cmap = cmap)
+    if False:
+        plt.show()
 
+    plt.savefig(outname, bbox_inches = 'tight', pad_inches = 0)
 
-    plt.savefig(outname)
     
