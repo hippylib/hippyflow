@@ -280,9 +280,11 @@ class ActiveSubspaceProjector:
 
 		last_datum_generated = 0
 		output_dimension,input_dimension = self.Js[0].shape
-		local_Us = np.zeros((0,output_dimension, self.parameters['rank']))	
-		local_sigmas = np.zeros((0,self.parameters['rank']))
-		local_Vs = np.zeros((0,input_dimension, self.parameters['rank']))
+
+		rank = min(self.parameters['rank'],output_dimension,input_dimension)
+		local_Us = np.zeros((0,output_dimension, rank))	
+		local_sigmas = np.zeros((0,rank))
+		local_Vs = np.zeros((0,input_dimension, rank))
 		# Initialize arrays
 		if check_for_data:
 			if os.path.isfile(output_directory+'Us_on_rank_'+str(my_rank)+'.npy') and \
@@ -304,7 +306,7 @@ class ActiveSubspaceProjector:
 		# Initialize randomized Omega
 		input_vector = dl.Vector(self.mesh_constructor_comm)
 		self.Js[0].init_vector(input_vector,1)
-		Omega = MultiVector(input_vector,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = MultiVector(input_vector,rank + self.parameters['oversampling'])
 		# Omega does not need to be communicated across processes in this case
 		# like with the global reduction collectives
 		parRandom.normal(1.,Omega)
@@ -318,7 +320,8 @@ class ActiveSubspaceProjector:
 		# change
 		assert len(self.Js) == self.parameters['samples_per_process']
 		for i in range(last_datum_generated+1,self.parameters['samples_per_process']):
-			print('Generating Jacobian data number '+str(i))
+			if self.parameters['verbose']:
+				print('Generating Jacobian data number '+str(i))
 			# Reusing Omega for each randomized pass
 
 			# Check and see if the rank is larger than the dimension of the observable
@@ -337,8 +340,8 @@ class ActiveSubspaceProjector:
 
 
 
-			
-			U, sigma, V = accuracyEnhancedSVD(self.Js[0],Omega,self.parameters['rank'],s=1)
+
+			U, sigma, V = accuracyEnhancedSVD(self.Js[0],Omega,rank,s=1)
 
 			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
 			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
@@ -351,7 +354,6 @@ class ActiveSubspaceProjector:
 				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
 		self._data_generation_time = time.time() - t0
 
-		return local_Us,local_sigmas,local_Vs
 
 
 	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):
