@@ -120,7 +120,7 @@ class ActiveSubspaceProjector:
 							self.observable.problem.Vh[0].mesh(), self.collective)
 		assert consistent_partitioning
 		if self.parameters['verbose']:
-			print(('Consistent partitioning:'+str(consistent_partitioning)).center(80))
+			print(('Consistent partitioning: '+str(consistent_partitioning)).center(80))
 
 		# Initialize many copies of observables here
 		self.observables = [self.observable]
@@ -262,6 +262,96 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_NG,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+	def construct_low_rank_Jacobians(self,output_directory = 'data/',check_for_data = True):
+		"""
+		This method generates low rank Jacobians for training
+			- :code:`output_directory` - a string specifying the path to the directory where data
+			will be saved
+			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
+			data already exists in directory specified by :code:`output_directory`.
+		"""
+
+		my_rank = int(self.collective.rank())
+		try:
+			os.mkdir(output_directory)
+		except:
+			pass
+
+		last_datum_generated = 0
+		output_dimension,input_dimension = self.Js[0].shape
+		local_Us = np.zeros((0,output_dimension, self.parameters['rank']))	
+		local_sigmas = np.zeros((0,self.parameters['rank']))
+		local_Vs = np.zeros((0,input_dimension, self.parameters['rank']))
+		# Initialize arrays
+		if check_for_data:
+			if os.path.isfile(output_directory+'Us_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy'):
+
+				local_Us = np.load(output_directory+'Us_on_rank_'+str(my_rank)+'.npy')
+				local_sigmas = np.load(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy')
+				local_Vs = np.load(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy')
+				last_datum_generated = min(local_Us.shape[0],local_sigmas.shape[0],local_Vs.shape[0])
+
+				if local_Us.shape[0] > last_datum_generated:
+					local_Us = local_Us[:last_datum_generated,:,:]
+				if local_sigmas.shape[0] > last_datum_generated:
+					local_sigmas = local_sigmas[:last_datum_generated,:,:]
+				if local_Vs.shape[0] > last_datum_generated:
+					local_Vs = local_Vs[:last_datum_generated,:,:]
+
+		# Initialize randomized Omega
+		input_vector = dl.Vector(self.mesh_constructor_comm)
+		self.Js[0].init_vector(input_vector,1)
+		Omega = MultiVector(input_vector,self.parameters['rank'] + self.parameters['oversampling'])
+		# Omega does not need to be communicated across processes in this case
+		# like with the global reduction collectives
+		parRandom.normal(1.,Omega)
+
+		t0 = time.time()
+		# I think this is all hard coded for a single serial mesh, check if 
+		# the arrays need to be communicated to mesh rank 0 before being saved
+
+		# Here the number of data generated are the length of the Jacobians
+		# This should be true by default but if self.Js are manipulated that could
+		# change
+		assert len(self.Js) == self.parameters['samples_per_process']
+		for i in range(last_datum_generated+1,self.parameters['samples_per_process']):
+			print('Generating Jacobian data number '+str(i))
+			# Reusing Omega for each randomized pass
+
+			# Check and see if the rank is larger than the dimension of the observable
+			# If so truncate it!!!!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+			
+			U, sigma, V = accuracyEnhancedSVD(self.Js[0],Omega,self.parameters['rank'],s=1)
+
+			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
+			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
+			local_Vs = np.concatenate((local_Vs,np.expand_dims(mv_to_dense(V),0)))
+
+			np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
+			np.save(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy',np.array(local_sigmas))
+			np.save(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy',np.array(local_Vs))
+			if self.parameters['verbose']:
+				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
+		self._data_generation_time = time.time() - t0
+
+		return local_Us,local_sigmas,local_Vs
 
 
 	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):

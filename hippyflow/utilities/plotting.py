@@ -135,3 +135,33 @@ def plot_accs_vs_data(data_dictionary,std_data_dictionary = {},\
     if show_plot:
         plt.show()
 
+
+def plot_singular_values_with_std(s,s_std,title = 'Average singular values with std',outname= 'out_plot.pdf'):
+    
+
+    # The reduced SVD is factorized in numpy as:
+
+#     print('Error = ',np.linalg.norm(J - U@np.diag(s)@V))
+#     print('Error = ',np.linalg.norm(J - (U*s)@V))
+
+    # Plot the singular values
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
+
+
+    fig, ax = plt.subplots()
+    indices = np.arange(1,len(s)+1)
+#     ax.plot(indices,s)
+    ax.semilogy(indices,s)
+    ax.fill_between(indices,s-s_std,s+s_std,alpha = 0.2)
+
+    ax.set_xlabel('i',fontsize = 20)
+    ax.set_ylabel('$\sigma_i$',fontsize = 20)
+    ax.set_title(title,fontsize = 20)
+
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig(outname)
+    plt.show()
