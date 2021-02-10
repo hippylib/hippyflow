@@ -23,7 +23,7 @@ import time
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
-from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
+from ..utilities.mv_utilities import mv_to_dense
 from ..utilities.plotting import *
 
 from .priorPreconditionedProjector import PriorPreconditionedProjector
@@ -87,7 +87,8 @@ class ActiveSubspaceProjector:
 	Output active subspace: :math:`J'J = US^2U^*`
 	Input active subspace: :math:`JJ' = VS^2V^*`
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
+	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None,\
+								 initialize_samples = False, parameters = ActiveSubspaceParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -125,6 +126,20 @@ class ActiveSubspaceProjector:
 		# Initialize many copies of observables here
 		self.observables = [self.observable]
 
+		# Can I infer input and output dimension here??
+		# If so then I can check for data first in low rank Jacobian generation
+		# and avoid the time consuming sample initialization.
+
+
+
+
+
+
+
+
+
+
+
 		if self.parameters['samples_per_process'] > 1:
 			assert self.parameters['observable_constructor'] is not None
 			for i in range(self.parameters['samples_per_process']-1):
@@ -134,13 +149,16 @@ class ActiveSubspaceProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-			
-		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
-		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
-		# Draw a new sample and set linearization point.
-		self.initialize_samples()
+		
+		self.us = None
+		self.ms = None
+		self.Js = None
 
-		self.Js = [ObservableJacobian(observable) for observable in self.observables]
+		# Draw a new sample and set linearization point.
+		if initialize_samples:
+			self.initialize_samples()
+
+		
 
 		self.d_GN = None
 		self.V_GN = None
@@ -156,6 +174,8 @@ class ActiveSubspaceProjector:
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
+		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
+		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		for u,m,observable in zip(self.us,self.ms,self.observables):
 			self.noise.zero()
 			parRandom.normal(1,self.noise)
@@ -171,6 +191,7 @@ class ActiveSubspaceProjector:
 				print(('Size of '+str(self.parameters['samples_per_process'])+' observable is '+str(asizeof.asizeof(self.observables)/1e6)+' MB').center(80))
 			except:
 				print('Install pympler and run again: pip install pympler'.center(80))
+		self.Js = [ObservableJacobian(observable) for observable in self.observables]
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
@@ -179,6 +200,9 @@ class ActiveSubspaceProjector:
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
 				The default parameter is True which is customary in active subspace construction
 		"""
+		if self.Js is None:
+			self.initialize_samples()
+
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed input subspace'.center(80))
@@ -230,6 +254,9 @@ class ActiveSubspaceProjector:
 		"""
 		This method implements the output subspace constructor 
 		"""
+		if self.Js is None:
+			self.initialize_samples()
+
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed output subspace'.center(80))
@@ -271,6 +298,8 @@ class ActiveSubspaceProjector:
 			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
 			data already exists in directory specified by :code:`output_directory`.
 		"""
+		if self.Js is None:
+			self.initialize_samples()
 
 		my_rank = int(self.collective.rank())
 		try:
@@ -319,40 +348,31 @@ class ActiveSubspaceProjector:
 		# This should be true by default but if self.Js are manipulated that could
 		# change
 		assert len(self.Js) == self.parameters['samples_per_process']
-		for i in range(last_datum_generated+1,self.parameters['samples_per_process']):
+		for i in range(last_datum_generated,self.parameters['samples_per_process']):
 			if self.parameters['verbose']:
 				print('Generating Jacobian data number '+str(i))
-			# Reusing Omega for each randomized pass
+			# Reusing Omega for each randomized pass, this shouldn't be an issue,
+			# but one could resample at each iteration
 
-			# Check and see if the rank is larger than the dimension of the observable
-			# If so truncate it!!!!
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-			U, sigma, V = accuracyEnhancedSVD(self.Js[0],Omega,rank,s=1)
+			U, sigma, V = accuracyEnhancedSVD(self.Js[i],Omega,rank,s=1)
 
 			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
 			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
 			local_Vs = np.concatenate((local_Vs,np.expand_dims(mv_to_dense(V),0)))
 
-			np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
-			np.save(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy',np.array(local_sigmas))
-			np.save(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy',np.array(local_Vs))
+			if self.mesh_constructor_comm.rank == 0:
+				np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
+				np.save(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy',np.array(local_sigmas))
+				np.save(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy',np.array(local_Vs))
 			if self.parameters['verbose']:
 				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
-		self._data_generation_time = time.time() - t0
+
+
+		if True:
+			out_name = self.parameters['output_directory']+'jacobian_singular_values_'+str(rank)+'.pdf'
+			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= 'jacobian_sigmas.pdf')
+
+		self._jacobian_data_generation_time = time.time() - t0
 
 
 

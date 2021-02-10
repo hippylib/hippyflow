@@ -21,7 +21,7 @@ import time
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
-from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
+from ..utilities.mv_utilities import mv_to_dense
 from ..utilities.plotting import *
 from .priorPreconditionedProjector import PriorPreconditionedProjector
 

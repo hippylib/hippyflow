@@ -165,3 +165,45 @@ def plot_singular_values_with_std(s,s_std,title = 'Average singular values with 
     plt.tight_layout()
     plt.savefig(outname)
     plt.show()
+
+
+def subspace_angle_video(angleses,keys = None,
+                 axis_label = ['i','Angle $(^o)$',('Subspace Angles between $V(m_0)$ and $V(m_{','})$')],
+                 out_name = 'subspace_angle_video'):
+
+    matplotlib.use("Agg")
+    import matplotlib.animation as manimation
+
+    FFMpegWriter = manimation.writers['ffmpeg']
+    metadata = dict(title='Subspace angles', artist='hippyflow',
+                    comment='Movie support!')
+    writer = FFMpegWriter(fps=5, metadata=metadata)
+
+
+    fig, ax = plt.subplots(figsize=(10,5))
+    y_max = np.max(np.absolute(angleses))
+    y_min = np.min(np.absolute(angleses))
+
+
+    indices = np.arange(len(angleses[0]))
+    with writer.saving(fig, out_name+'.mp4',dpi = 200):
+        try:
+            from tqdm import tqdm
+            for i,angles in enumerate(tqdm(angleses)):
+                ax.set_ylim([y_min, y_max])
+                ax.set_xlabel(axis_label[0],fontsize = 25)
+                ax.set_ylabel(axis_label[1],fontsize = 25)
+                ax.set_title(axis_label[2][0]+str(i)+axis_label[2][1],fontsize = 25)
+                ax.plot(indices, angles)
+                writer.grab_frame()
+                ax.cla()
+
+        except:
+            for i,angles in enumerate(angleses):
+                ax.set_ylim(y_min, y_max)
+                ax.set_xlabel(axis_label[0],fontsize = 25)
+                ax.set_ylabel(axis_label[1],fontsize = 25)
+                ax.set_title(axis_label[2][0]+str(i)+axis_label[2][1],fontsize = 25)
+                ax.plot(indices, angles)
+                writer.grab_frame()
+                ax.cla()
