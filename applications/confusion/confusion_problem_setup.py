@@ -96,7 +96,7 @@ prior = BiLaplacian2D(Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
 metadata = {}
 
 
-# Active Subspace
+# Build Active Subspace
 if args.save_as or args.save_jacobian_data:
 	AS_parameters = ActiveSubspaceParameterList()
 	AS_parameters['observable_constructor'] = confusion_linear_observable
@@ -105,6 +105,9 @@ if args.save_as or args.save_jacobian_data:
 	AS_parameters['plot_label_suffix'] = r' $\gamma = '+str(args.gamma)+',\enskip \delta = '+str(args.delta)+'$'
 	AS_parameters['rank'] = args.as_rank
 	AS = ActiveSubspaceProjector(observable,prior, mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = AS_parameters)	
+
+# Construct input and output subspaces
+if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
@@ -197,7 +200,7 @@ if args.save_data:
 if args.save_jacobian_data:
 	print(80*'#')
 	print('Made it to the Jacobian data generation!')
-	AS.construct_low_rank_Jacobians(output_directory)
+	AS.construct_low_rank_Jacobians(output_directory+'jacobian_data/')
 	metadata['jacobian_data_time'] = AS._jacobian_data_generation_time
 
 

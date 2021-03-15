@@ -162,6 +162,19 @@ class LinearStateObservable:
 		self.B.mult(u0,out)
 
 		return out
+
+	def evalu(self,u):
+		"""
+		Given a state field that is already solved for :code:`u`, evaluate the linear 
+		state observable $Bu(m)$
+		
+		Return the linear state observable $Bu(m)
+		
+		"""
+		out = dl.Vector()
+		self.B.init_vector(out,0)
+		self.B.mult(u,out)
+		return out
 	
 	def solveFwd(self, out, x):
 		"""

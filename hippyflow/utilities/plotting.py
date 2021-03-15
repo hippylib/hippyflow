@@ -136,7 +136,7 @@ def plot_accs_vs_data(data_dictionary,std_data_dictionary = {},\
         plt.show()
 
 
-def plot_singular_values_with_std(s,s_std,title = 'Average singular values with std',outname= 'out_plot.pdf'):
+def plot_singular_values_with_std(s,s_std,title = 'Average singular values with std',outname= 'out_plot.pdf',show = False):
     
 
     # The reduced SVD is factorized in numpy as:
@@ -164,7 +164,8 @@ def plot_singular_values_with_std(s,s_std,title = 'Average singular values with 
     ax.grid()
     plt.tight_layout()
     plt.savefig(outname)
-    plt.show()
+    if show:
+        plt.show()
 
 
 def subspace_angle_video(angleses,keys = None,
@@ -181,9 +182,10 @@ def subspace_angle_video(angleses,keys = None,
 
 
     fig, ax = plt.subplots(figsize=(10,5))
-    y_max = np.max(np.absolute(angleses))
-    y_min = np.min(np.absolute(angleses))
+    y_max = np.max([np.max(angles) for angles in angleses])
+    y_min = np.max([np.min(angles) for angles in angleses])
 
+    max_index = np.max([len(angles) for angles in angles])
 
     indices = np.arange(len(angleses[0]))
     with writer.saving(fig, out_name+'.mp4',dpi = 200):
@@ -191,6 +193,7 @@ def subspace_angle_video(angleses,keys = None,
             from tqdm import tqdm
             for i,angles in enumerate(tqdm(angleses)):
                 ax.set_ylim([y_min, y_max])
+                ax.set_xlim([0,max_index])
                 ax.set_xlabel(axis_label[0],fontsize = 25)
                 ax.set_ylabel(axis_label[1],fontsize = 25)
                 ax.set_title(axis_label[2][0]+str(i)+axis_label[2][1],fontsize = 25)

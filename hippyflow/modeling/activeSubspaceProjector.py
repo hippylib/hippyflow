@@ -290,20 +290,23 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
-	def construct_low_rank_Jacobians(self,output_directory = 'data/',check_for_data = True):
+	def construct_low_rank_Jacobians(self,output_directory = 'data/jacobian_data/',check_for_data = True):
 		"""
-		This method generates low rank Jacobians for training
+		This method generates low rank Jacobians for training (and also saves input output data in tandem)
 			- :code:`output_directory` - a string specifying the path to the directory where data
 			will be saved
 			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
 			data already exists in directory specified by :code:`output_directory`.
+		Note that this method also saves the input output data and saves them to a directory that 
+		is by default a jacobian_data/ directory
+		This allows for separate sampling for l2 loss and h1 seminorm loss
 		"""
 		if self.Js is None:
 			self.initialize_samples()
 
 		my_rank = int(self.collective.rank())
 		try:
-			os.mkdir(output_directory)
+			os.makedirs(output_directory)
 		except:
 			pass
 
@@ -314,23 +317,37 @@ class ActiveSubspaceProjector:
 		local_Us = np.zeros((0,output_dimension, rank))	
 		local_sigmas = np.zeros((0,rank))
 		local_Vs = np.zeros((0,input_dimension, rank))
+		local_ms = np.zeros((0,input_dimension))
+		local_qs = np.zeros((0,output_dimension))
 		# Initialize arrays
 		if check_for_data:
+			# Save all five or restart sampling and saving
 			if os.path.isfile(output_directory+'Us_on_rank_'+str(my_rank)+'.npy') and \
 				os.path.isfile(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy') and \
-				os.path.isfile(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy'):
+				os.path.isfile(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
 
 				local_Us = np.load(output_directory+'Us_on_rank_'+str(my_rank)+'.npy')
 				local_sigmas = np.load(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy')
 				local_Vs = np.load(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy')
-				last_datum_generated = min(local_Us.shape[0],local_sigmas.shape[0],local_Vs.shape[0])
+				local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
+				local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
+
+				last_datum_generated = min(local_Us.shape[0],local_sigmas.shape[0],local_Vs.shape[0],\
+											local_ms.shape[0],local_qs.shape[0])
 
 				if local_Us.shape[0] > last_datum_generated:
 					local_Us = local_Us[:last_datum_generated,:,:]
 				if local_sigmas.shape[0] > last_datum_generated:
-					local_sigmas = local_sigmas[:last_datum_generated,:,:]
+					local_sigmas = local_sigmas[:last_datum_generated,:]
 				if local_Vs.shape[0] > last_datum_generated:
 					local_Vs = local_Vs[:last_datum_generated,:,:]
+				if local_ms.shape[0] > last_datum_generated:
+					local_ms = local_ms[:last_datum_generated,:]
+				if local_qs.shape[0] > last_datum_generated:
+					local_qs = local_qs[:last_datum_generated,:]
+
 
 		# Initialize randomized Omega
 		input_vector = dl.Vector(self.mesh_constructor_comm)
@@ -360,12 +377,14 @@ class ActiveSubspaceProjector:
 			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
 			local_Vs = np.concatenate((local_Vs,np.expand_dims(mv_to_dense(V),0)))
 
+
+
 			if self.mesh_constructor_comm.rank == 0:
 				np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
 				np.save(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy',np.array(local_sigmas))
 				np.save(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy',np.array(local_Vs))
 			if self.parameters['verbose']:
-				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
+				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 
 
 		if True:
@@ -373,6 +392,25 @@ class ActiveSubspaceProjector:
 			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= 'jacobian_sigmas.pdf')
 
 		self._jacobian_data_generation_time = time.time() - t0
+
+		# Generate the input output pairs that correspond to the 
+		assert len(self.ms) == self.parameters['samples_per_process']
+		assert len(self.us) == self.parameters['samples_per_process']
+		# If the us are updated in place then create a method for the observable that just applies B to u
+		t0_mq = time.time()
+		# Then here we can just retrieve m and q = Bu and save as numpy arrays
+		# with the same ordering as with the Jacobian data.
+		for i in range(last_datum_generated,self.parameters['samples_per_process']):
+			if self.parameters['verbose']:
+				print('Saving input output data pair '+str(i))
+
+			local_ms = np.concatenate((local_ms,np.expand_dims(self.ms[i].get_local(),0)))
+			qi = self.observables[i].evalu(self.us[i]).get_local()
+			local_qs = np.concatenate((local_qs,np.expand_dims(qi,0)))
+			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			if self.parameters['verbose']:
+				print('On datum saved every ',(time.time() -t0_mq)/(i - last_datum_generated+1),' s, on average.')
 
 
 

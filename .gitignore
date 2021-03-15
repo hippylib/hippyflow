@@ -6,6 +6,12 @@ __pycache__/
 # My custom ignores
 *logging*
 *.DS_Store*
+*.pdf
+*.mp4
+*/data/*
+*old_*
+*/post_proc/*
+*private*
 
 # C extensions
 *.so

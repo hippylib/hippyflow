@@ -106,7 +106,7 @@ class PODProjector:
 		self.solve_at_mean()
 		my_rank = int(self.collective.rank())
 		try:
-			os.mkdir(output_directory)
+			os.makedirs(output_directory)
 		except:
 			pass
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
@@ -128,7 +128,7 @@ class PODProjector:
 		t0 = time.time()
 		# I think this is all hard coded for a single serial mesh, check if 
 		# the arrays need to be communicated to mesh rank 0 before being saved
-		for i in range(last_datum_generated+1,self.parameters['data_per_process']):
+		for i in range(last_datum_generated,self.parameters['data_per_process']):
 			print('Generating data number '+str(i))
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
@@ -141,7 +141,7 @@ class PODProjector:
 			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
 			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
 			if self.parameters['verbose']:
-				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated),' s, on average.')
+				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 		self._data_generation_time = time.time() - t0
 
 
