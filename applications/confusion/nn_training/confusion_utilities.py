@@ -14,7 +14,7 @@
 import numpy as np
 import os
 
-def load_helmholtz_data(data_dir,rescale = False,derivatives = True,n_data = np.inf):
+def load_confusion_data(data_dir,rescale = False,derivatives = True,n_data = np.inf):
 	assert os.path.isdir(data_dir)
 	data_files = os.listdir(data_dir)
 	data_files = [data_dir + file for file in data_files]
@@ -28,7 +28,6 @@ def load_helmholtz_data(data_dir,rescale = False,derivatives = True,n_data = np.
 			q_files.append(file)
 
 	ranks = [int(file.split(data_dir+'ms_on_rank_')[-1].split('.npy')[0]) for file in m_files]
-
 	max_rank = max(ranks)
 
 	# Serially concatenate data
@@ -65,23 +64,21 @@ def load_helmholtz_data(data_dir,rescale = False,derivatives = True,n_data = np.
 				sigma_files.append(file)
 			if 'Vs_on_rank_' in file:
 				V_files.append(file)
-		if not U_files or not sigma_files or not V_files:
-			print('No derivative data'.center(80))
-		else:
-			ranks = [int(file.split(data_dir+'sigmas_on_rank_')[-1].split('.npy')[0]) for file in sigma_files]
-			max_rank = max(ranks)
 
-			# Serially concatenate derivative data
-			U_data = np.load(data_dir+'Us_on_rank_0.npy')
-			sigma_data = np.load(data_dir+'sigmas_on_rank_0.npy')
-			V_data = np.load(data_dir+'Vs_on_rank_0.npy')
-			for i in range(1,max_rank+1):
-				appendage_U = np.load(data_dir+'Us_on_rank_'+str(i)+'.npy')
-				U_data = np.concatenate((U_data,appendage_U))
-				appendage_sigma = np.load(data_dir+'sigmas_on_rank_'+str(i)+'.npy')
-				sigma_data = np.concatenate((sigma_data,appendage_sigma))
-				appendage_V = np.load(data_dir+'Vs_on_rank_'+str(i)+'.npy')
-				V_data = np.concatenate((V_data,appendage_V))
+		ranks = [int(file.split(data_dir+'sigmas_on_rank_')[-1].split('.npy')[0]) for file in sigma_files]
+		max_rank = max(ranks)
+
+		# Serially concatenate derivative data
+		U_data = np.load(data_dir+'Us_on_rank_0.npy')
+		sigma_data = np.load(data_dir+'sigmas_on_rank_0.npy')
+		V_data = np.load(data_dir+'Vs_on_rank_0.npy')
+		for i in range(1,max_rank+1):
+			appendage_U = np.load(data_dir+'Us_on_rank_'+str(i)+'.npy')
+			U_data = np.concatenate((U_data,appendage_U))
+			appendage_sigma = np.load(data_dir+'sigmas_on_rank_'+str(i)+'.npy')
+			sigma_data = np.concatenate((sigma_data,appendage_sigma))
+			appendage_V = np.load(data_dir+'Vs_on_rank_'+str(i)+'.npy')
+			V_data = np.concatenate((V_data,appendage_V))
 
 		if n_data < np.inf:
 			assert type(n_data) is int
@@ -92,9 +89,9 @@ def load_helmholtz_data(data_dir,rescale = False,derivatives = True,n_data = np.
 		if rescale:
 			raise NotImplementedError('This needs to be thought out with care')
 
-			data_dict['U_data'] = U_data
-			data_dict['sigma_data'] = sigma_data
-			data_dict['V_data'] = V_data
+		data_dict['U_data'] = U_data
+		data_dict['sigma_data'] = sigma_data
+		data_dict['V_data'] = V_data
 		
 
 	return data_dict
@@ -179,13 +176,13 @@ def modify_projectors(projectors,input_subspace,output_subspace):
 		if rescale_input:
 			# Scaling factor of 10 seemed to perform well for KLE and AS
 			# and this was independent of the projector rank.
-			scale_factor_input = 0.05*float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
+			scale_factor_input = float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
 			input_projector /= scale_factor_input*np.linalg.norm(input_projector)
 
 	elif input_subspace == 'random':
 		input_projector = np.random.randn(*projectors['KLE'].shape)
 		input_projector,_ = np.linalg.qr(input_projector)
-		scale_factor_input = 0.05*float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
+		scale_factor_input = float(input_projector.shape[0])/(32*float(input_projector.shape[-1]))
 		input_projector /= scale_factor_input*np.linalg.norm(input_projector)
 
 	# Modify the output projectors

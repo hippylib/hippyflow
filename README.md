@@ -28,6 +28,11 @@
                                                       
 
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
+[![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
+[![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)
+![Code size](https://img.shields.io/github/languages/code-size/hippylib/hippyflow)
+[![Issues](https://img.shields.io/github/issues/hippylib/hippyflow)](https://github.com/hippylib/hippyflow/issues)
+[![Latest commit](https://img.shields.io/github/last-commit/hippylib/hippyflow)](https://github.com/hippylib/hippyflow/commits/master)
 
 
 * This code is used to construct dimension reduced neural network surrogeates for parametric mappings governed by PDEs
