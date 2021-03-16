@@ -102,6 +102,7 @@ if args.save_as or args.save_jacobian_data:
 	AS_parameters['observable_constructor'] = confusion_linear_observable
 	AS_parameters['observable_kwargs'] = observable_kwargs
 	AS_parameters['output_directory'] = output_directory
+	AS_parameters['samples_per_process'] = 512
 	AS_parameters['plot_label_suffix'] = r' $\gamma = '+str(args.gamma)+',\enskip \delta = '+str(args.delta)+'$'
 	AS_parameters['rank'] = args.as_rank
 	AS = ActiveSubspaceProjector(observable,prior, mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = AS_parameters)	

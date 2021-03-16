@@ -349,6 +349,26 @@ class ActiveSubspaceProjector:
 					local_qs = local_qs[:last_datum_generated,:]
 
 
+		# Generate the input output pairs that correspond to the 
+		assert len(self.ms) == self.parameters['samples_per_process']
+		assert len(self.us) == self.parameters['samples_per_process']
+		# If the us are updated in place then create a method for the observable that just applies B to u
+		t0_mq = time.time()
+		# Then here we can just retrieve m and q = Bu and save as numpy arrays
+		# with the same ordering as with the Jacobian data.
+		for i in range(last_datum_generated,self.parameters['samples_per_process']):
+			if self.parameters['verbose']:
+				print('Saving input output data pair '+str(i))
+
+			local_ms = np.concatenate((local_ms,np.expand_dims(self.ms[i].get_local(),0)))
+			qi = self.observables[i].evalu(self.us[i]).get_local()
+			local_qs = np.concatenate((local_qs,np.expand_dims(qi,0)))
+			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			if self.parameters['verbose']:
+				print('On datum saved every ',(time.time() -t0_mq)/(i - last_datum_generated+1),' s, on average.')
+
+
 		# Initialize randomized Omega
 		input_vector = dl.Vector(self.mesh_constructor_comm)
 		self.Js[0].init_vector(input_vector,1)
@@ -392,25 +412,6 @@ class ActiveSubspaceProjector:
 			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= 'jacobian_sigmas.pdf')
 
 		self._jacobian_data_generation_time = time.time() - t0
-
-		# Generate the input output pairs that correspond to the 
-		assert len(self.ms) == self.parameters['samples_per_process']
-		assert len(self.us) == self.parameters['samples_per_process']
-		# If the us are updated in place then create a method for the observable that just applies B to u
-		t0_mq = time.time()
-		# Then here we can just retrieve m and q = Bu and save as numpy arrays
-		# with the same ordering as with the Jacobian data.
-		for i in range(last_datum_generated,self.parameters['samples_per_process']):
-			if self.parameters['verbose']:
-				print('Saving input output data pair '+str(i))
-
-			local_ms = np.concatenate((local_ms,np.expand_dims(self.ms[i].get_local(),0)))
-			qi = self.observables[i].evalu(self.us[i]).get_local()
-			local_qs = np.concatenate((local_qs,np.expand_dims(qi,0)))
-			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-			if self.parameters['verbose']:
-				print('On datum saved every ',(time.time() -t0_mq)/(i - last_datum_generated+1),' s, on average.')
 
 
 
