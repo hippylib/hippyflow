@@ -28,7 +28,7 @@
                                                       
 
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
-[![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE)
+[![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
 [![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)
 ![Code size](https://img.shields.io/github/languages/code-size/hippylib/hippyflow)
 [![Issues](https://img.shields.io/github/issues/hippylib/hippyflow)](https://github.com/hippylib/hippyflow/issues)
