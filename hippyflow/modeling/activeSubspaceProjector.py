@@ -23,7 +23,7 @@ import time
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
-from ..utilities.mv_utilities import mv_to_dense, dense_to_mv
+from ..utilities.mv_utilities import mv_to_dense
 from ..utilities.plotting import *
 
 from .priorPreconditionedProjector import PriorPreconditionedProjector
@@ -87,7 +87,8 @@ class ActiveSubspaceProjector:
 	Output active subspace: :math:`J'J = US^2U^*`
 	Input active subspace: :math:`JJ' = VS^2V^*`
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = ActiveSubspaceParameterList()):
+	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None,\
+								 initialize_samples = False, parameters = ActiveSubspaceParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -120,10 +121,24 @@ class ActiveSubspaceProjector:
 							self.observable.problem.Vh[0].mesh(), self.collective)
 		assert consistent_partitioning
 		if self.parameters['verbose']:
-			print(('Consistent partitioning:'+str(consistent_partitioning)).center(80))
+			print(('Consistent partitioning: '+str(consistent_partitioning)).center(80))
 
 		# Initialize many copies of observables here
 		self.observables = [self.observable]
+
+		# Can I infer input and output dimension here??
+		# If so then I can check for data first in low rank Jacobian generation
+		# and avoid the time consuming sample initialization.
+
+
+
+
+
+
+
+
+
+
 
 		if self.parameters['samples_per_process'] > 1:
 			assert self.parameters['observable_constructor'] is not None
@@ -134,13 +149,16 @@ class ActiveSubspaceProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-			
-		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
-		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
-		# Draw a new sample and set linearization point.
-		self.initialize_samples()
+		
+		self.us = None
+		self.ms = None
+		self.Js = None
 
-		self.Js = [ObservableJacobian(observable) for observable in self.observables]
+		# Draw a new sample and set linearization point.
+		if initialize_samples:
+			self.initialize_samples()
+
+		
 
 		self.d_GN = None
 		self.V_GN = None
@@ -156,6 +174,8 @@ class ActiveSubspaceProjector:
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
+		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
+		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		for u,m,observable in zip(self.us,self.ms,self.observables):
 			self.noise.zero()
 			parRandom.normal(1,self.noise)
@@ -171,6 +191,7 @@ class ActiveSubspaceProjector:
 				print(('Size of '+str(self.parameters['samples_per_process'])+' observable is '+str(asizeof.asizeof(self.observables)/1e6)+' MB').center(80))
 			except:
 				print('Install pympler and run again: pip install pympler'.center(80))
+		self.Js = [ObservableJacobian(observable) for observable in self.observables]
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
@@ -179,6 +200,9 @@ class ActiveSubspaceProjector:
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
 				The default parameter is True which is customary in active subspace construction
 		"""
+		if self.Js is None:
+			self.initialize_samples()
+
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed input subspace'.center(80))
@@ -230,6 +254,9 @@ class ActiveSubspaceProjector:
 		"""
 		This method implements the output subspace constructor 
 		"""
+		if self.Js is None:
+			self.initialize_samples()
+
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed output subspace'.center(80))
@@ -262,6 +289,129 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_NG,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+	def construct_low_rank_Jacobians(self,output_directory = 'data/jacobian_data/',check_for_data = True):
+		"""
+		This method generates low rank Jacobians for training (and also saves input output data in tandem)
+			- :code:`output_directory` - a string specifying the path to the directory where data
+			will be saved
+			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
+			data already exists in directory specified by :code:`output_directory`.
+		Note that this method also saves the input output data and saves them to a directory that 
+		is by default a jacobian_data/ directory
+		This allows for separate sampling for l2 loss and h1 seminorm loss
+		"""
+		if self.Js is None:
+			self.initialize_samples()
+
+		my_rank = int(self.collective.rank())
+		try:
+			os.makedirs(output_directory)
+		except:
+			pass
+
+		last_datum_generated = 0
+		output_dimension,input_dimension = self.Js[0].shape
+
+		rank = min(self.parameters['rank'],output_dimension,input_dimension)
+		local_Us = np.zeros((0,output_dimension, rank))	
+		local_sigmas = np.zeros((0,rank))
+		local_Vs = np.zeros((0,input_dimension, rank))
+		local_ms = np.zeros((0,input_dimension))
+		local_qs = np.zeros((0,output_dimension))
+		# Initialize arrays
+		if check_for_data:
+			# Save all five or restart sampling and saving
+			if os.path.isfile(output_directory+'Us_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
+				os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
+
+				local_Us = np.load(output_directory+'Us_on_rank_'+str(my_rank)+'.npy')
+				local_sigmas = np.load(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy')
+				local_Vs = np.load(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy')
+				local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
+				local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
+
+				last_datum_generated = min(local_Us.shape[0],local_sigmas.shape[0],local_Vs.shape[0],\
+											local_ms.shape[0],local_qs.shape[0])
+
+				if local_Us.shape[0] > last_datum_generated:
+					local_Us = local_Us[:last_datum_generated,:,:]
+				if local_sigmas.shape[0] > last_datum_generated:
+					local_sigmas = local_sigmas[:last_datum_generated,:]
+				if local_Vs.shape[0] > last_datum_generated:
+					local_Vs = local_Vs[:last_datum_generated,:,:]
+				if local_ms.shape[0] > last_datum_generated:
+					local_ms = local_ms[:last_datum_generated,:]
+				if local_qs.shape[0] > last_datum_generated:
+					local_qs = local_qs[:last_datum_generated,:]
+
+
+		# Initialize randomized Omega
+		input_vector = dl.Vector(self.mesh_constructor_comm)
+		self.Js[0].init_vector(input_vector,1)
+		Omega = MultiVector(input_vector,rank + self.parameters['oversampling'])
+		# Omega does not need to be communicated across processes in this case
+		# like with the global reduction collectives
+		parRandom.normal(1.,Omega)
+
+		t0 = time.time()
+		# I think this is all hard coded for a single serial mesh, check if 
+		# the arrays need to be communicated to mesh rank 0 before being saved
+
+		# Here the number of data generated are the length of the Jacobians
+		# This should be true by default but if self.Js are manipulated that could
+		# change
+		assert len(self.Js) == self.parameters['samples_per_process']
+		for i in range(last_datum_generated,self.parameters['samples_per_process']):
+			if self.parameters['verbose']:
+				print('Generating Jacobian data number '+str(i))
+			# Reusing Omega for each randomized pass, this shouldn't be an issue,
+			# but one could resample at each iteration
+
+			U, sigma, V = accuracyEnhancedSVD(self.Js[i],Omega,rank,s=1)
+
+			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
+			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
+			local_Vs = np.concatenate((local_Vs,np.expand_dims(mv_to_dense(V),0)))
+
+
+
+			if self.mesh_constructor_comm.rank == 0:
+				np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
+				np.save(output_directory+'sigmas_on_rank_'+str(my_rank)+'.npy',np.array(local_sigmas))
+				np.save(output_directory+'Vs_on_rank_'+str(my_rank)+'.npy',np.array(local_Vs))
+			if self.parameters['verbose']:
+				print('On Jacobian datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+
+
+		if True:
+			out_name = self.parameters['output_directory']+'jacobian_singular_values_'+str(rank)+'.pdf'
+			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= 'jacobian_sigmas.pdf')
+
+		self._jacobian_data_generation_time = time.time() - t0
+
+		# Generate the input output pairs that correspond to the 
+		assert len(self.ms) == self.parameters['samples_per_process']
+		assert len(self.us) == self.parameters['samples_per_process']
+		# If the us are updated in place then create a method for the observable that just applies B to u
+		t0_mq = time.time()
+		# Then here we can just retrieve m and q = Bu and save as numpy arrays
+		# with the same ordering as with the Jacobian data.
+		for i in range(last_datum_generated,self.parameters['samples_per_process']):
+			if self.parameters['verbose']:
+				print('Saving input output data pair '+str(i))
+
+			local_ms = np.concatenate((local_ms,np.expand_dims(self.ms[i].get_local(),0)))
+			qi = self.observables[i].evalu(self.us[i]).get_local()
+			local_qs = np.concatenate((local_qs,np.expand_dims(qi,0)))
+			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			if self.parameters['verbose']:
+				print('On datum saved every ',(time.time() -t0_mq)/(i - last_datum_generated+1),' s, on average.')
+
 
 
 	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):

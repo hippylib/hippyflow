@@ -135,3 +135,78 @@ def plot_accs_vs_data(data_dictionary,std_data_dictionary = {},\
     if show_plot:
         plt.show()
 
+
+def plot_singular_values_with_std(s,s_std,title = 'Average singular values with std',outname= 'out_plot.pdf',show = False):
+    
+
+    # The reduced SVD is factorized in numpy as:
+
+#     print('Error = ',np.linalg.norm(J - U@np.diag(s)@V))
+#     print('Error = ',np.linalg.norm(J - (U*s)@V))
+
+    # Plot the singular values
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
+
+
+    fig, ax = plt.subplots()
+    indices = np.arange(1,len(s)+1)
+#     ax.plot(indices,s)
+    ax.semilogy(indices,s)
+    ax.fill_between(indices,s-s_std,s+s_std,alpha = 0.2)
+
+    ax.set_xlabel('i',fontsize = 20)
+    ax.set_ylabel('$\sigma_i$',fontsize = 20)
+    ax.set_title(title,fontsize = 20)
+
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig(outname)
+    if show:
+        plt.show()
+
+
+def subspace_angle_video(angleses,keys = None,
+                 axis_label = ['i','Angle $(^o)$',('Subspace Angles between $V(m_0)$ and $V(m_{','})$')],
+                 out_name = 'subspace_angle_video'):
+
+    matplotlib.use("Agg")
+    import matplotlib.animation as manimation
+
+    FFMpegWriter = manimation.writers['ffmpeg']
+    metadata = dict(title='Subspace angles', artist='hippyflow',
+                    comment='Movie support!')
+    writer = FFMpegWriter(fps=5, metadata=metadata)
+
+
+    fig, ax = plt.subplots(figsize=(10,5))
+    y_max = np.max([np.max(angles) for angles in angleses])
+    y_min = np.max([np.min(angles) for angles in angleses])
+
+    max_index = np.max([len(angles) for angles in angles])
+
+    indices = np.arange(len(angleses[0]))
+    with writer.saving(fig, out_name+'.mp4',dpi = 200):
+        try:
+            from tqdm import tqdm
+            for i,angles in enumerate(tqdm(angleses)):
+                ax.set_ylim([y_min, y_max])
+                ax.set_xlim([0,max_index])
+                ax.set_xlabel(axis_label[0],fontsize = 25)
+                ax.set_ylabel(axis_label[1],fontsize = 25)
+                ax.set_title(axis_label[2][0]+str(i)+axis_label[2][1],fontsize = 25)
+                ax.plot(indices, angles)
+                writer.grab_frame()
+                ax.cla()
+
+        except:
+            for i,angles in enumerate(angleses):
+                ax.set_ylim(y_min, y_max)
+                ax.set_xlabel(axis_label[0],fontsize = 25)
+                ax.set_ylabel(axis_label[1],fontsize = 25)
+                ax.set_title(axis_label[2][0]+str(i)+axis_label[2][1],fontsize = 25)
+                ax.plot(indices, angles)
+                writer.grab_frame()
+                ax.cla()

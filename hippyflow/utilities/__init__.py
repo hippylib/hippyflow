@@ -13,8 +13,8 @@
 
 from .mesh_utils import read_serial_write_parallel_mesh
 
-from .mv_utilities import mv_to_dense, dense_to_mv
+from .mv_utilities import mv_to_dense
 
-from .plotting import spectrum_plot, generic_semilogy_plot, plot_accs_vs_data
+from .plotting import *
 
 from .plot_eigenvectors import plot_eigenvector

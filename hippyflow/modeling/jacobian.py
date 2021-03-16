@@ -88,7 +88,7 @@ class ObservableJacobian:
         self.Bu = dl.Vector(self.mpi_comm())
         self.observable.B.init_vector(self.Bu,0)
         self.Ctphat = observable.generate_vector(PARAMETER)
-        self.shape = (self.Bu.get_local().shape[0],self.rhs_fwd.get_local().shape[0])
+        self.shape = (self.Bu.get_local().shape[0],self.yhelp.get_local().shape[0])
 
     def mpi_comm(self):
         return self.observable.B.mpi_comm()

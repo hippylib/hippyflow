@@ -30,6 +30,11 @@ from hippyflow import *
 
 from confusion_linear_observable import confusion_linear_observable
 
+import pickle
+def save_logger(logger,filename = 'error_data.pkl'):
+    with open(output_directory+filename, 'wb+') as f:
+        pickle.dump(logger, f, pickle.HIGHEST_PROTOCOL)
+
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('-ninstance',dest = 'ninstance',required= False,default = 1,help='number of instances',type = int)
@@ -46,6 +51,8 @@ parser.add_argument('-delta',dest = 'delta',required=False,default = 2.0, help="
 parser.add_argument('-formulation',dest = 'formulation',required=False,default = 'cubic_nonlinearity', help="formulation name string",type=str)
 parser.add_argument('-save_data',dest = 'save_data',\
 					required= False,default = 1,help='boolean for saving of data',type = int)
+parser.add_argument('-save_jacobian_data',dest = 'save_jacobian_data',\
+					required= False,default = 1,help='boolean for saving of Jacobian data',type = int)
 parser.add_argument('-save_pod',dest = 'save_pod',\
 					required= False,default = 1,help='boolean for saving of POD projectors',type = int)
 parser.add_argument('-save_as',dest = 'save_as',\
@@ -89,8 +96,8 @@ prior = BiLaplacian2D(Vh[PARAMETER],gamma = args.gamma, delta = args.delta)
 metadata = {}
 
 
-# Active Subspace
-if args.save_as:
+# Build Active Subspace
+if args.save_as or args.save_jacobian_data:
 	AS_parameters = ActiveSubspaceParameterList()
 	AS_parameters['observable_constructor'] = confusion_linear_observable
 	AS_parameters['observable_kwargs'] = observable_kwargs
@@ -98,6 +105,9 @@ if args.save_as:
 	AS_parameters['plot_label_suffix'] = r' $\gamma = '+str(args.gamma)+',\enskip \delta = '+str(args.delta)+'$'
 	AS_parameters['rank'] = args.as_rank
 	AS = ActiveSubspaceProjector(observable,prior, mesh_constructor_comm = mesh_constructor_comm,collective = my_collective,parameters = AS_parameters)	
+
+# Construct input and output subspaces
+if args.save_as:
 	AS.construct_input_subspace()
 	AS.construct_output_subspace()
 
@@ -138,12 +148,9 @@ if args.save_pod:
 	metadata['pod_time'] = POD._subspace_construction_time
 
 
+
 # Test Errors
 if args.save_errors:
-	import pickle
-	def save_logger(logger,filename = 'error_data.pkl'):
-	    with open(output_directory+filename, 'wb+') as f:
-	        pickle.dump(logger, f, pickle.HIGHEST_PROTOCOL)
 	# Error Data
 	error_data = {}
 	input_ranks = [8,16,32,64,128]
@@ -188,6 +195,14 @@ if args.save_data:
 	POD.generate_training_data(output_directory)
 
 	metadata['data_time'] = POD._data_generation_time
+
+
+if args.save_jacobian_data:
+	print(80*'#')
+	print('Made it to the Jacobian data generation!')
+	AS.construct_low_rank_Jacobians(output_directory+'jacobian_data/')
+	metadata['jacobian_data_time'] = AS._jacobian_data_generation_time
+
 
 if args.save_two_states:
 	print(80*'#')
