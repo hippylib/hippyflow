@@ -413,8 +413,6 @@ class ActiveSubspaceProjector:
 
 		self._jacobian_data_generation_time = time.time() - t0
 
-		
-
 
 
 	def test_errors(self,test_input = True, test_output = False, ranks = [None],cut_off = 1e-12):
