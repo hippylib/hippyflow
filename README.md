@@ -27,6 +27,9 @@
 			                                                      
                                                       
 
+[![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
+
+
 * This code is used to construct dimension reduced neural network surrogeates for parametric mappings governed by PDEs
 
 * [`hIPPYlib`](https://github.com/hippylib/hippylib) is used for the data generation and construction of model based projectors
