@@ -83,8 +83,6 @@ if args.train_data_size <= 256:
 	settings['batch_size'] = int(args.batch_size/4)
 	settings['hess_batch_size'] = int(args.batch_size/32)
 
-#################################################################################
-
 ntargets = 100
 gamma = args.gamma
 delta = args.delta
@@ -140,6 +138,7 @@ for nx in [64,192]:
 
 
 		n_data += settings['test_data_size']
+
 		confusion_data  = load_confusion_data(data_dir,rescale = False,n_data = n_data)
 
 		m_data = confusion_data['m_data']
@@ -219,8 +218,6 @@ for nx in [64,192]:
 		if not architecture+'_'+str(n_data) in master_logger.keys():
 			master_logger[architecture+'_'+str(n_data)] = {}
 
-		
-
 		################################################################################
 		# Instantiate the problem, data and regularization.
 		q_mean = np.mean(q_data,axis = 0)
@@ -229,6 +226,7 @@ for nx in [64,192]:
 		# Instante the data object
 		data = Data({problem.x:m_data,problem.y_true:q_data},settings['batch_size'],\
 			validation_data_size = settings['test_data_size'],hessian_batch_size = settings['hess_batch_size'],seed = 0)
+
 
 		settings['tikhonov_gamma'] = 0.0
 
@@ -253,9 +251,11 @@ for nx in [64,192]:
 		if 'projected_dense' in architecture and set_weights:	
 			HLModelSettings['layer_weights'] = layer_weights
 
+
 		HLModelSettings['printing_items'] = {'sweeps':'sweeps','Loss':'train_loss','acc train':'train_acc',\
 												'||g||':'||g||','Loss test':'val_loss','acc test':'val_acc',\
 												'maxacc':'max_val_acc','var red':'val_variance_reduction','alpha':'alpha'}
+
 
 		HLModel = HessianlearnModel(problem,regularization,data,settings = HLModelSettings)
 

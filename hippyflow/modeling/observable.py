@@ -238,6 +238,7 @@ class LinearStateObservable:
 	
 	def applyC(self, dm, out):
 		"""
+
 		Apply the :math:`C` block of the Hessian to a (incremental) parameter variable, i.e.
 		:code:`out` = :math:`C dm`
 		

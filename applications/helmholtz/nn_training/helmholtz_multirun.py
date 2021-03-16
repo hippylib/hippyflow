@@ -34,6 +34,7 @@ from neuralNetworks import *
 
 from helmholtz_utilities import *
 
+
 # Parse run specifications
 from argparse import ArgumentParser
 
@@ -140,10 +141,12 @@ for nx in [64,128]:
 
 
 		n_data += settings['test_data_size']
+
 		helmholtz_data = load_helmholtz_data(data_dir,rescale = False,n_data = n_data)
 
 		m_data = helmholtz_data['m_data']
 		q_data = helmholtz_data['q_data']
+
 
 		input_dim = m_data.shape[-1]
 		output_dim = q_data.shape[-1]
@@ -230,6 +233,7 @@ for nx in [64,128]:
 			data = Data({problem.x:m_data,problem.y_true:q_data},settings['batch_size'],\
 				validation_data_size = settings['test_data_size'],hessian_batch_size = settings['hess_batch_size'])
 
+
 			settings['tikhonov_gamma'] = 0.0
 
 			regularization = L2Regularization(problem,gamma = settings['tikhonov_gamma'])
@@ -257,6 +261,7 @@ for nx in [64,128]:
 			HLModelSettings['printing_items'] = {'sweeps':'sweeps','Loss':'train_loss','acc train':'train_acc',\
 												'||g||':'||g||','Loss test':'val_loss','acc test':'val_acc',\
 												'maxacc':'max_val_acc','var red':'val_variance_reduction','alpha':'alpha'}
+
 
 			HLModel = HessianlearnModel(problem,regularization,data,settings = HLModelSettings)
 
