@@ -16,7 +16,8 @@ import dolfin as dl
 import numpy as np
 from hippylib import *
 
-def BiLaplacian2D(Vh_parameter,gamma = 0.1,delta = 0.1, theta0 = 2.0, theta1 = 0.5, alpha = np.pi/4,mean = None):
+def BiLaplacian2D(Vh_parameter,gamma = 0.1,delta = 0.1, theta0 = 2.0, theta1 = 0.5,\
+			 alpha = np.pi/4,mean = None, robin_bc = False):
 	"""
 	Return 2D BiLaplacian prior given function space and coefficients for Matern covariance
 	"""
@@ -25,10 +26,10 @@ def BiLaplacian2D(Vh_parameter,gamma = 0.1,delta = 0.1, theta0 = 2.0, theta1 = 0
 	anis_diff.theta1 = theta1
 	anis_diff.alpha = alpha	
 
-	return BiLaplacianPrior(Vh_parameter, gamma, delta, anis_diff,mean = mean)
+	return BiLaplacianPrior(Vh_parameter, gamma, delta, anis_diff,mean = mean,robin_bc = robin_bc)
 
 
-def Laplacian2D(Vh_parameter,gamma = 0.1,delta = 0.1, theta0 = 2.0, theta1 = 0.5, alpha = np.pi/4,mean = None):
+def Laplacian2D(Vh_parameter,gamma = 0.1,delta = 0.1, theta0 = 2.0, theta1 = 0.5,alpha = np.pi/4,mean = None):
 	"""
 	Return 2D Laplacian prior given function space and coefficients for Matern covariance
 	"""
