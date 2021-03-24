@@ -409,7 +409,7 @@ class ActiveSubspaceProjector:
 
 		if True:
 			out_name = self.parameters['output_directory']+'jacobian_singular_values_'+str(rank)+'.pdf'
-			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= 'jacobian_sigmas.pdf')
+			plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= out_name)
 
 		self._jacobian_data_generation_time = time.time() - t0
 

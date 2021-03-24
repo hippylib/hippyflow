@@ -46,8 +46,8 @@ parser.add_argument('-pod_rank',dest = 'pod_rank',required= False,default = 128,
 
 parser.add_argument('-nx',dest = 'nx',required= False,default = 32,help='targets for observable',type = int)
 parser.add_argument('-ny',dest = 'ny',required= False,default = 32,help='targets for observable',type = int)
-parser.add_argument('-gamma',dest = 'gamma',required=False,default = 1.0, help="gamma for matern prior",type=float)
-parser.add_argument('-delta',dest = 'delta',required=False,default = 2.0, help="delta for matern prior",type=float)
+parser.add_argument('-gamma',dest = 'gamma',required=False,default = 0.04, help="gamma for matern prior",type=float)
+parser.add_argument('-delta',dest = 'delta',required=False,default = 0.2, help="delta for matern prior",type=float)
 
 parser.add_argument('-rel_noise',dest = 'rel_noise',required=False,default = 0.1, help="relative noise",type=float)
 
@@ -88,7 +88,7 @@ output_directory = 'data/darcy_OED_g'+str(args.gamma)+'_d'+str(args.delta)+'_nx'
 os.makedirs(output_directory,exist_ok = True)
 save_states_dir = output_directory+'save_states/'
 
-# Instantiate confusion linear observable
+# Instantiate Darcy linear observable
 mesh = dl.UnitSquareMesh(mesh_constructor_comm, args.nx, args.ny)
 observable_kwargs = {'output_folder':save_states_dir}
 observable = darcy_linear_observable(mesh,**observable_kwargs)
@@ -102,7 +102,7 @@ metadata = {}
 # Build Active Subspace
 if args.save_as or args.save_jacobian_data:
 	AS_parameters = ActiveSubspaceParameterList()
-	AS_parameters['observable_constructor'] = confusion_linear_observable
+	AS_parameters['observable_constructor'] = darcy_linear_observable
 	AS_parameters['observable_kwargs'] = observable_kwargs
 	AS_parameters['output_directory'] = output_directory
 	AS_parameters['samples_per_process'] = 512
@@ -193,7 +193,8 @@ if args.save_errors:
 
 
 
-if args.save_data:
+if args.save_data and not args.save_jacobian_data:
+	# Saving the Jacobian data saves the state data as well.
 	print(80*'#')
 	print('Made it to the POD data generation!')
 	POD.generate_training_data(output_directory)
