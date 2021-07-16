@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The University of Texas at Austin 
+# Copyright (c) 2020-2021, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -32,7 +32,7 @@ class PriorPreconditionedProjector:
 		self.Cinv = Cinv
 		self.my_init_vector = my_init_vector
 
-		self.Cinvx = dl.Vector()
+		self.Cinvx = dl.Vector(self.Cinv.mpi_comm())
 		self.my_init_vector(self.Cinvx,0)
 
 		pass

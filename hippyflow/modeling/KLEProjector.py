@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The University of Texas at Austin 
+# Copyright (c) 2020-2021, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -199,7 +199,7 @@ class KLEProjector:
 		global_std_rel_errors = np.zeros_like(ranks,dtype = np.float64)
 
 		# Naive test on input space
-		projection_vector = dl.Vector()
+		projection_vector = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(projection_vector,0)
 
 		LocalParameters = MultiVector(projection_vector,self.parameters['error_test_samples'])

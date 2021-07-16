@@ -1,6 +1,6 @@
 # Copyright (c) 2016-2018, The University of Texas at Austin 
 # & University of California--Merced.
-# Copyright (c) 2019-2020, The University of Texas at Austin 
+# Copyright (c) 2019-2021, The University of Texas at Austin 
 # University of California--Merced, Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -117,7 +117,7 @@ class ConstrainedNSolver:
         g0_norm = gn.norm("l2")
         gn_norm = g0_norm
         tol = max(g0_norm*rtol, atol)
-        du = dl.Vector()
+        du = dl.Vector(u.vector().mpi_comm())
 
         if prt_level > 0:
             print( "{0:>3} {1:>15} {2:>15} {3:>15} {4:>15}".format(
