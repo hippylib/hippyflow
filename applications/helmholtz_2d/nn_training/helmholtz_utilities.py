@@ -14,7 +14,7 @@
 import numpy as np
 import os
 
-def load_helmholtz_data(data_dir,rescale = False,derivatives = True,n_data = np.inf):
+def load_helmholtz_data(data_dir,rescale = False,derivatives = False,n_data = np.inf):
 	assert os.path.isdir(data_dir)
 	data_files = os.listdir(data_dir)
 	data_files = [data_dir + file for file in data_files]

@@ -40,8 +40,8 @@ from argparse import ArgumentParser
 
 parser = ArgumentParser(add_help=True)
 parser.add_argument("-optimizer", dest='optimizer',required=False, default = 'incg', help="optimizer type",type=str)
-parser.add_argument('-fixed_step',dest = 'fixed_step',\
-					required= False,default = 0,help='boolean for fixed step vs globalization',type = int)
+parser.add_argument('-globalization',dest = 'globalization',\
+					required= False,default = 'line_search',help='boolean for fixed step vs globalization',type = str)
 parser.add_argument('-alpha',dest = 'alpha',required = False,default = 1e-3,help= 'learning rate alpha',type=float)
 parser.add_argument('-hessian_low_rank',dest = 'hessian_low_rank',required= False,default = 20,help='low rank for sfn',type = int)
 parser.add_argument('-record_spectrum',dest = 'record_spectrum',\
@@ -229,7 +229,10 @@ HLModelSettings = HessianlearnModelSettings()
 
 HLModelSettings['optimizer'] = args.optimizer
 HLModelSettings['alpha'] = args.alpha
-HLModelSettings['fixed_step'] = args.fixed_step
+if args.globalization == 'None':
+	HLModelSettings['globalization'] = None
+else:
+	HLModelSettings['globalization'] = args.globalization
 HLModelSettings['hessian_low_rank'] = args.hessian_low_rank
 HLModelSettings['max_backtrack'] = 16
 HLModelSettings['max_sweeps'] = args.max_sweeps
