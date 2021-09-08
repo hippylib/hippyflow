@@ -55,3 +55,21 @@
 * Given information about dominant subspaces of the input and output spaces for the parametric mappings, `hIPPYflow` implements dimension reduced neural network surrogates. These surrogates allow for parsimonious representations of input-output mappings that can achieve good accuracy for very few training data. Few data is a key feature of many high dimensional PDE based inference problems. 
 
 * Neural network models are implemented in `keras`. Training can be handled directly by `keras`, or using second order optimizers implemented in `hessianlearn`.
+
+
+# References
+
+These publications use the hippyflow library
+
+- \[1\] O'Leary-Roseberry, T., Villa, U., Chen P., Ghattas O.,
+[**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://arxiv.org/abs/2011.15110).
+arXiv:2011.15110.
+([Download](https://arxiv.org/pdf/2011.15110.pdf))<details><summary>BibTeX</summary><pre>
+@article{o2020derivative,
+  title={Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs},
+  author={O'Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2011.15110},
+  year={2020}
+}
+}</pre></details>
+

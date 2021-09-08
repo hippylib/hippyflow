@@ -177,13 +177,22 @@ class ActiveSubspaceProjector:
 		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
 		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		for u,m,observable in zip(self.us,self.ms,self.observables):
-			self.noise.zero()
-			parRandom.normal(1,self.noise)
-			# set linearization point
-			self.prior.sample(self.noise,m)
-			x = [u,m,None]
-			observable.solveFwd(u,x)
-			observable.setLinearizationPoint(x)
+			solved = False
+			while not solved:
+				try:
+					self.noise.zero()
+					parRandom.normal(1,self.noise)
+					# set linearization point
+					self.prior.sample(self.noise,m)
+					x = [u,m,None]
+					print('Attempting to solve')
+					observable.solveFwd(u,x)
+					print('Solution succesful')
+					observable.setLinearizationPoint(x)
+					solved = True
+				except:
+					print('Issue with the solution, moving on')
+					pass
 		if self.parameters['verbose']:
 			try:
 				from pympler import asizeof

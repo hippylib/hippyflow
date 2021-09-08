@@ -132,14 +132,28 @@ class PODProjector:
 			print('Generating data number '+str(i))
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
-			local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+			
 			self.u.zero()
 			self.u.axpy(1.,self.u_at_mean)
 			x = [self.u,self.m,None]
 			self.observable.setLinearizationPoint(x)
-			local_qs = np.concatenate((local_qs,np.expand_dims(self.observable.eval(self.m).get_local(),0)))
-			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			solution = self.observable.eval(self.m).get_local()
+			# If there is an issue with the solve move on
+			# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
+			# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+			# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+			# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			try:
+				solution = self.observable.eval(self.m).get_local()
+				# If there is an issue with the solve move on
+				local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
+				local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+				np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+				np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			except:
+				print('Issue with the nonlinear solve, moving on')
+				pass
+			
 			if self.parameters['verbose']:
 				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 		self._data_generation_time = time.time() - t0
