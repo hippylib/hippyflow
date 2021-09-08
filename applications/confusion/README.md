@@ -1,6 +1,6 @@
 # Convection-Reaction-Diffusion Numerical Example
 
-* Generate training data used in numerical example:
+* Generate training data used in numerical examples:
 
 `python generate_confusion.py`
 

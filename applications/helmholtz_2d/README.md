@@ -1,6 +1,6 @@
 # Helmholtz Numerical Example
 
-* Generate training data used in numerical example:
+* Generate training data used in numerical examples:
 
 `python generate_helmholtz.py`
 
