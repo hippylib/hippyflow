@@ -1,15 +1,19 @@
-# Copyright (c) 2020, The University of Texas at Austin 
-# & Washington University in St. Louis.
+# This file is part of the hIPPYflow package
 #
-# All Rights reserved.
-# See file COPYRIGHT for details.
+# hIPPYflow is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or any later version.
 #
-# This file is part of the hIPPYflow package. For more information see
-# https://github.com/hippylib/hippyflow/
+# hIPPYflow is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-# hIPPYflow is free software; you can redistribute it and/or modify it under the
-# terms of the GNU General Public License (as published by the Free
-# Software Foundation) version 2.0 dated June 1991.
+# You should have received a copy of the GNU General Public License
+# If not, see <http://www.gnu.org/licenses/>.
+#
+# Author: Tom O'Leary-Roseberry
+# Contact: tom.olearyroseberry@utexas.edu
 
 import numpy as np
 import os
@@ -26,8 +30,8 @@ sys.path.append( os.environ.get('HESSIANLEARN_PATH'))
 from hessianlearn import *
 
 from neuralNetworks import *
-
-from confusion_utilities import *
+sys.path.append('../')
+from helmholtz_utilities import *
 
 tf.set_random_seed(1)
 
@@ -36,8 +40,8 @@ from argparse import ArgumentParser
 
 parser = ArgumentParser(add_help=True)
 parser.add_argument("-optimizer", dest='optimizer',required=False, default = 'incg', help="optimizer type",type=str)
-parser.add_argument('-fixed_step',dest = 'fixed_step',\
-					required= False,default = 0,help='boolean for fixed step vs globalization',type = int)
+parser.add_argument('-globalization',dest = 'globalization',\
+					required= False,default = 'line_search',help='boolean for fixed step vs globalization',type = str)
 parser.add_argument('-alpha',dest = 'alpha',required = False,default = 1e-3,help= 'learning rate alpha',type=float)
 parser.add_argument('-hessian_low_rank',dest = 'hessian_low_rank',required= False,default = 20,help='low rank for sfn',type = int)
 parser.add_argument('-record_spectrum',dest = 'record_spectrum',\
@@ -50,17 +54,17 @@ parser.add_argument('-max_sweeps',dest = 'max_sweeps',required= False,default = 
 parser.add_argument('-fixed_input_rank',dest = 'fixed_input_rank',required= False,default = 8,help='fixed input rank',type = int)
 parser.add_argument('-fixed_output_rank',dest = 'fixed_output_rank',required= False,default = 16,help='fixed input rank',type = int)
 
-parser.add_argument("-architecture", dest='architecture',required=False, default = 'as_projected_dense', help="architecture type",type=str)
+parser.add_argument("-architecture", dest='architecture',required=False, default = 'generic_dense', help="architecture type",type=str)
 
 parser.add_argument('-test_data_size',dest = 'test_data_size',required= False,default = 512,help='test data size',type = int)
-parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 512,help='train data size',type = int)
+parser.add_argument('-train_data_size',dest = 'train_data_size',required= False,default = 1024+512,help='train data size',type = int)
 
-parser.add_argument('-gamma',dest = 'gamma',required= False,default = 0.1,\
+parser.add_argument('-gamma',dest = 'gamma',required= False,default = 1.0,\
 						help='Matern prior gamma, (delta I - gamma Laplacian)',type = float)
-parser.add_argument('-delta',dest = 'delta',required= False,default = 1.0,\
+parser.add_argument('-delta',dest = 'delta',required= False,default = 5.0,\
 						help='Matern prior delta, (delta I - gamma Laplacian)',type = float)
 
-parser.add_argument('-nx',dest = 'nx',required= False,default = 192,help='Mesh discretization parameter',type = int)
+parser.add_argument('-nx',dest = 'nx',required= False,default = 128,help='Mesh discretization parameter',type = int)
 args = parser.parse_args()
 
 
@@ -77,6 +81,9 @@ if args.train_data_size <= 256:
 	settings['batch_size'] = int(args.batch_size/4)
 	settings['hess_batch_size'] = int(args.batch_size/32)
 
+################################################################################
+
+
 ntargets = 100
 gamma = args.gamma
 delta = args.delta
@@ -85,19 +92,20 @@ nx = args.nx
 
 n_data = settings['train_data_size'] + settings['test_data_size']
 
-formulation = 'cubic_nonlinearity'
+formulation = 'single_freq_600'
 
 data_dir = '../data/'+formulation+'_n_obs_'+str(ntargets)+'_g'+str(gamma)+'_d'+str(delta)+'_nx'+str(nx)+'/'
 
 assert os.path.isdir(data_dir), 'Directory does not exist'+data_dir
 
-confusion_data  = load_confusion_data(data_dir,rescale = False,n_data = n_data)
+helmholtz_data = load_helmholtz_data(data_dir,rescale = False,n_data = n_data)
 
-m_data = confusion_data['m_data']
-q_data = confusion_data['q_data']
+m_data = helmholtz_data['m_data']
+q_data = helmholtz_data['q_data']
 
 input_dim = m_data.shape[-1]
 output_dim = q_data.shape[-1]
+
 
 ################################################################################
 # Create the neural network in keras
@@ -109,10 +117,10 @@ fixed_output_rank = args.fixed_output_rank
 projectors = get_projectors(data_dir,fixed_input_rank = fixed_input_rank,fixed_output_rank = fixed_output_rank)
 
 architecture = args.architecture
-problem_name = 'confusion'+'_nt_'+str(ntargets)+'_g_'+str(gamma)+'_d_'+str(delta)+'_nx_'+str(nx)
-################################################################################
-assert architecture in ['generic_dense','generic_linear','kle_projected_dense','as_projected_dense','random_projected_dense','low_rank_linear']
-layer_weights = {}
+	################################################################################
+assert architecture in ['generic_dense','generic_linear','kle_projected_dense','as_projected_dense','random_projected_dense',\
+										'low_rank_linear','kle_plrrn','as_plrrn','random_plrrn']
+
 if architecture == 'generic_dense':
 	regressor = generic_dense(input_dim,output_dim)
 	# regressor.summary()
@@ -131,8 +139,6 @@ elif architecture == 'kle_projected_dense':
 	intermediate_layers = 2
 	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
 							trainable = trainable)
-	layer_weights['input_proj_layer'] = [input_projector]
-	layer_weights['output_layer'] = [output_projector.T,np.zeros(output_projector.T.shape[-1])]
 	# regressor.summary()
 	print('Using KLE dense network'.center(80))
 
@@ -144,8 +150,6 @@ elif architecture == 'as_projected_dense':
 	intermediate_layers = 2
 	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
 							trainable = trainable)
-	layer_weights['input_proj_layer'] = [input_projector]
-	layer_weights['output_layer'] = [output_projector.T,np.zeros(output_projector.T.shape[-1])]
 	# regressor.summary()
 	print('Using AS dense network'.center(80))
 
@@ -157,8 +161,40 @@ elif architecture == 'random_projected_dense':
 	intermediate_layers = 2
 	regressor = projected_dense(input_projector,output_projector,intermediate_layers = intermediate_layers,\
 							trainable = trainable)
-	layer_weights['input_proj_layer'] = [input_projector]
-	layer_weights['output_layer'] = [output_projector.T,np.zeros(output_projector.T.shape[-1])]
+	# regressor.summary()
+	print('Using random projected dense network'.center(80))
+
+
+elif architecture == 'kle_plrrn':
+	input_subspace = 'kle'
+	output_subspace = 'pod'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
+	trainable = False
+	ranks = [4,4]
+	regressor = projected_low_rank_residual_network(input_projector,output_projector,ranks = ranks,\
+							trainable = trainable)
+	# regressor.summary()
+	print('Using KLE dense network'.center(80))
+
+elif architecture == 'as_plrrn':
+	input_subspace = 'as'
+	output_subspace = 'pod'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
+	trainable = False
+	ranks = [4,4]
+	regressor = projected_low_rank_residual_network(input_projector,output_projector,ranks = ranks,\
+							trainable = trainable)
+	# regressor.summary()
+	print('Using AS dense network'.center(80))
+
+elif architecture == 'random_plrrn':
+	input_subspace = 'random'
+	output_subspace = 'random'
+	input_projector,output_projector = modify_projectors(projectors,input_subspace,output_subspace)
+	trainable = False
+	ranks = [4,4]
+	regressor = projected_low_rank_residual_network(input_projector,output_projector,ranks = ranks,\
+							trainable = trainable)
 	# regressor.summary()
 	print('Using random projected dense network'.center(80))
 
@@ -176,6 +212,7 @@ regressor.summary()
 ################################################################################
 # Instantiate the problem, data and regularization.
 q_mean = np.mean(q_data,axis = 0)
+
 problem = RegressionProblem(regressor,y_mean = q_mean,dtype=tf.float32)
 
 # Instante the data object
@@ -192,18 +229,22 @@ HLModelSettings = HessianlearnModelSettings()
 
 HLModelSettings['optimizer'] = args.optimizer
 HLModelSettings['alpha'] = args.alpha
-HLModelSettings['fixed_step'] = args.fixed_step
+if args.globalization == 'None':
+	HLModelSettings['globalization'] = None
+else:
+	HLModelSettings['globalization'] = args.globalization
 HLModelSettings['hessian_low_rank'] = args.hessian_low_rank
 HLModelSettings['max_backtrack'] = 16
 HLModelSettings['max_sweeps'] = args.max_sweeps
 
-HLModelSettings['problem_name'] = problem_name
+HLModelSettings['problem_name'] = 'helmholtz_'+formulation+'_nt_'+str(ntargets)+'_g_'+str(gamma)+'_d_'+str(delta)+'_nx_'+str(nx)
 HLModelSettings['record_spectrum'] = bool(args.record_spectrum)
 HLModelSettings['rq_data_size'] = 100
 
 set_weights = True
 if 'projected' in architecture and set_weights:
-	HLModelSettings['layer_weights'] = layer_weights
+	HLModelSettings['layer_weights'] = {'input_proj_layer':[input_projector],\
+					'output_layer':[output_projector.T,np.zeros(output_projector.T.shape[-1])]}
 
 HLModelSettings['printing_items'] = {'sweeps':'sweeps','Loss':'train_loss','acc train':'train_acc',\
 												'||g||':'||g||','Loss test':'val_loss','acc test':'val_acc',\

@@ -95,7 +95,7 @@ class PODProjector:
 		self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
 
-	def generate_training_data(self,output_directory = 'data/',check_for_data = True):
+	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True):
 		"""
 		This method generates training data
 			- :code:`output_directory` - a string specifying the path to the directory where data
@@ -116,47 +116,92 @@ class PODProjector:
 		q_shape = observable_vector.get_local().shape[0]
 		print('m_shape = ',m_shape)
 		print('q_shape = ',q_shape)
-		local_ms = np.zeros((0,m_shape))
-		local_qs = np.zeros((0,q_shape))
-		if check_for_data:
-			if os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
-				os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
-				local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
-				local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
-				last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
+		if sequential:
+			rank_specific_directory = output_directory+'ms_on_rank_'+str(my_rank)+'/'
+			os.makedirs(rank_specific_directory)
+			if check_for_data:
+				ms_generated = os.listdir(rank_specific_directory)
+				qs_generated = os.listdir(rank_specific_directory)
+				m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+				last_m = max(m_indices)
+				q_indices = [int(m_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+				last_q = max(q_indices)
+				last_datum_generated = min(last_m,last_q)
 
-		t0 = time.time()
-		# I think this is all hard coded for a single serial mesh, check if 
-		# the arrays need to be communicated to mesh rank 0 before being saved
-		for i in range(last_datum_generated,self.parameters['data_per_process']):
-			print('Generating data number '+str(i))
-			parRandom.normal(1,self.noise)
-			self.prior.sample(self.noise,self.m)
-			
-			self.u.zero()
-			self.u.axpy(1.,self.u_at_mean)
-			x = [self.u,self.m,None]
-			self.observable.setLinearizationPoint(x)
-			solution = self.observable.eval(self.m).get_local()
-			# If there is an issue with the solve move on
-			# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-			# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-			# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-			# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-			try:
+			t0 = time.time()
+			for i in range(last_datum_generated,self.parameters['data_per_process']):
+				print('Generating data number '+str(i))
+				parRandom.normal(1,self.noise)
+				self.prior.sample(self.noise,self.m)
+				
+				self.u.zero()
+				self.u.axpy(1.,self.u_at_mean)
+				x = [self.u,self.m,None]
+				self.observable.setLinearizationPoint(x)
 				solution = self.observable.eval(self.m).get_local()
 				# If there is an issue with the solve move on
-				local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-				local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-				np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-				np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-			except:
-				print('Issue with the nonlinear solve, moving on')
-				pass
-			
-			if self.parameters['verbose']:
-				print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
-		self._data_generation_time = time.time() - t0
+				# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
+				# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+				# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+				# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+				try:
+					solution = self.observable.eval(self.m).get_local()
+					this_m = self.m.get_local()
+					this_q = solution
+					np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
+					np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
+					# If there is an issue with the solve move on
+				except:
+					print('Issue with the nonlinear solve, moving on')
+					pass
+				
+				if self.parameters['verbose']:
+					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+			self._data_generation_time = time.time() - t0
+
+		else:
+
+			local_ms = np.zeros((0,m_shape))
+			local_qs = np.zeros((0,q_shape))
+			if check_for_data:
+				if os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
+					os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
+					local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
+					local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
+					last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
+
+			t0 = time.time()
+			# I think this is all hard coded for a single serial mesh, check if 
+			# the arrays need to be communicated to mesh rank 0 before being saved
+			for i in range(last_datum_generated,self.parameters['data_per_process']):
+				print('Generating data number '+str(i))
+				parRandom.normal(1,self.noise)
+				self.prior.sample(self.noise,self.m)
+				
+				self.u.zero()
+				self.u.axpy(1.,self.u_at_mean)
+				x = [self.u,self.m,None]
+				self.observable.setLinearizationPoint(x)
+				solution = self.observable.eval(self.m).get_local()
+				# If there is an issue with the solve move on
+				# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
+				# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+				# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+				# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+				try:
+					solution = self.observable.eval(self.m).get_local()
+					# If there is an issue with the solve move on
+					local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
+					local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
+					np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+					np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+				except:
+					print('Issue with the nonlinear solve, moving on')
+					pass
+				
+				if self.parameters['verbose']:
+					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+			self._data_generation_time = time.time() - t0
 
 
 	def construct_subspace(self):

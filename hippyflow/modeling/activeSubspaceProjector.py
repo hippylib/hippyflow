@@ -185,7 +185,9 @@ class ActiveSubspaceProjector:
 					# set linearization point
 					self.prior.sample(self.noise,m)
 					x = [u,m,None]
+					print('Attempting to solve')
 					observable.solveFwd(u,x)
+					print('Solution succesful')
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
