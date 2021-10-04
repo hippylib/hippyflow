@@ -118,15 +118,17 @@ class PODProjector:
 		print('q_shape = ',q_shape)
 		if sequential:
 			rank_specific_directory = output_directory+'ms_on_rank_'+str(my_rank)+'/'
-			os.makedirs(rank_specific_directory)
+			os.makedirs(rank_specific_directory,exist_ok = True)
 			if check_for_data:
-				ms_generated = os.listdir(rank_specific_directory)
-				qs_generated = os.listdir(rank_specific_directory)
-				m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
-				last_m = max(m_indices)
-				q_indices = [int(m_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
-				last_q = max(q_indices)
-				last_datum_generated = min(last_m,last_q)
+				if os.path.isfile(rank_specific_directory+'ms_sample_'+str(my_rank)+'.npy') and \
+					os.path.isfile(rank_specific_directory+'qs_sample_'+str(my_rank)+'.npy'):
+					ms_generated = os.listdir(rank_specific_directory)
+					qs_generated = os.listdir(rank_specific_directory)
+					m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+					last_m = max(m_indices)
+					q_indices = [int(m_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+					last_q = max(q_indices)
+					last_datum_generated = min(last_m,last_q)
 
 			t0 = time.time()
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
