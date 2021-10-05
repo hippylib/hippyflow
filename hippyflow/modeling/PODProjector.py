@@ -95,7 +95,8 @@ class PODProjector:
 		self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
 
-	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True):
+	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True,\
+																			compress_files = True):
 		"""
 		This method generates training data
 			- :code:`output_directory` - a string specifying the path to the directory where data
@@ -111,13 +112,13 @@ class PODProjector:
 			pass
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
-		last_datum_generated = -1
+		last_datum_generated = 0
 		m_shape = self.m.get_local().shape[0]
 		q_shape = observable_vector.get_local().shape[0]
 		print('m_shape = ',m_shape)
 		print('q_shape = ',q_shape)
 		if sequential:
-			rank_specific_directory = output_directory+'ms_on_rank_'+str(my_rank)+'/'
+			rank_specific_directory = output_directory+'data_on_rank_'+str(my_rank)+'/'
 			os.makedirs(rank_specific_directory,exist_ok = True)
 			if check_for_data:
 				if os.path.isfile(rank_specific_directory+'ms_sample_'+str(my_rank)+'.npy') and \
@@ -141,11 +142,6 @@ class PODProjector:
 				x = [self.u,self.m,None]
 				self.observable.setLinearizationPoint(x)
 				solution = self.observable.eval(self.m).get_local()
-				# If there is an issue with the solve move on
-				# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-				# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-				# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-				# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
 				try:
 					solution = self.observable.eval(self.m).get_local()
 					this_m = self.m.get_local()
@@ -160,6 +156,13 @@ class PODProjector:
 				if self.parameters['verbose']:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
+			if compress_files:
+				local_ms = np.zeros(self.parameters['data_per_process'],m_shape)
+				local_qs = np.zeros(self.parameters['data_per_process'],q_shape)
+				for i in range(0,self.parameters['data_per_process']):
+					local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
+					local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
+				np.savez_compressed('mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 
 		else:
 
