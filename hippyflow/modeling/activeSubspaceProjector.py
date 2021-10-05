@@ -40,6 +40,12 @@ def ActiveSubspaceParameterList():
 	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
+
+	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
+														many samples are allocated on one process ']
+	parameters['serialized_sampling']		= [False, 'Boolean for the serialization of sampling on a process\
+													 to reduce memory for large problems']
+
 	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
 	parameters['observable_kwargs'] 		= [{},'kwargs used when instantiating multiple local instances of observables']
 
@@ -76,6 +82,26 @@ class SummedListOperator:
 		else:
 			y.axpy(1.,temp)
 
+class SeriallySampledJTJOperator:
+	'''
+	Alterantive to SummedListOperator when memory is an issue for active subspace
+	'''
+	def __init__(self,observable,nsamples,communicator=None,average=True):
+		self.observable = observable
+		self.average = average
+		if communicator is None:
+			self.temp = None
+		else:
+			self.temp = dl.Vector(communicator)
+
+		self.u = self.observable.generate_vector(STATE)
+		self.m = self.observable.generate_vector(PARAMETER)
+
+	def MatMVMult(self,x,y):
+		for i in range(nsamples):
+			pass
+		pass
+
 
 
 class ActiveSubspaceProjector:
@@ -88,7 +114,7 @@ class ActiveSubspaceProjector:
 	Input active subspace: :math:`JJ' = VS^2V^*`
 	"""
 	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None,\
-								 initialize_samples = False, parameters = ActiveSubspaceParameterList()):
+								  parameters = ActiveSubspaceParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -131,16 +157,9 @@ class ActiveSubspaceProjector:
 		# and avoid the time consuming sample initialization.
 
 
-
-
-
-
-
-
-
-
-
-		if self.parameters['samples_per_process'] > 1:
+		# Here we allocate many copies of the observable if serialized_sampling is not True in the
+		# active subspace parameters
+		if self.parameters['samples_per_process'] > 1 and not self.parameters['serialized_sampling']:
 			assert self.parameters['observable_constructor'] is not None
 			for i in range(self.parameters['samples_per_process']-1):
 				new_observable = self.parameters['observable_constructor'](self.observable.problem.Vh[0].mesh(),**self.parameters['observable_kwargs'])
@@ -149,17 +168,21 @@ class ActiveSubspaceProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-		
-		self.us = None
-		self.ms = None
-		self.Js = None
+		if self.parameters['serialized_sampling']:
+			self.u = None
+			self.m = None
+			self.J = None
+		else:		
+			self.us = None
+			self.ms = None
+			self.Js = None
 
 		# Draw a new sample and set linearization point.
-		if initialize_samples:
-			self.initialize_samples()
+		if self.parameters['initialize_samples']:
+			if not self.parameters['serialized_sampling']:
+				self._initialize_batched_samples()
 
 		
-
 		self.d_GN = None
 		self.V_GN = None
 		self.d_GN_noprior = None
@@ -170,7 +193,7 @@ class ActiveSubspaceProjector:
 		self.U_NG = None
 
 
-	def initialize_samples(self):
+	def _initialize_batched_samples(self):
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
@@ -204,13 +227,29 @@ class ActiveSubspaceProjector:
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
+		if self.parameters['serialized_sampling']:
+			self._construct_input_subspace_serialized(prior_preconditioned = prior_preconditioned)
+		else:
+			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
+
+	def _construct_input_subspace_serialized(self,prior_preconditioned = True):
+		"""
+		This method implements the input subspace constructor 
+			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
+				The default parameter is True which is customary in active subspace construction
+		"""
+		pass
+
+
+
+	def _construct_input_subspace_batched(self,prior_preconditioned = True):
 		"""
 		This method implements the input subspace constructor 
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
 				The default parameter is True which is customary in active subspace construction
 		"""
 		if self.Js is None:
-			self.initialize_samples()
+			self._initialize_batched_samples()
 
 		if self.parameters['verbose']:
 			print(80*'#')
@@ -258,13 +297,18 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
+	def construct_output_subspace(self,prior_preconditioned = True):
+		if self.parameters['serialized_sampling']:
+			pass
+		else:
+			self._construct_output_subspace_batched(prior_preconditioned = prior_preconditioned)
 
-	def construct_output_subspace(self):
+	def _construct_output_subspace_batched(self):
 		"""
 		This method implements the output subspace constructor 
 		"""
 		if self.Js is None:
-			self.initialize_samples()
+			self._initialize_batched_samples()
 
 		if self.parameters['verbose']:
 			print(80*'#')
