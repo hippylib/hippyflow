@@ -82,19 +82,23 @@ class SummedListOperator:
 		else:
 			y.axpy(1.,temp)
 
-class SeriallySampledJTJOperator:
+class SeriallySampledJacobianOperator:
 	'''
 	Alterantive to SummedListOperator when memory is an issue for active subspace
 	'''
-	def __init__(self,observable,noise,nsamples = None,ms = None,communicator=None,average=True):
+	def __init__(self,observable,noise,prior,operation = 'JTJ',nsamples = None,ms = None,communicator=None,average=True):
 		'''
 		'''
+		assert operation in ['JTJ','JJT']
 		assert (nsamples is not None) or (ms is not None)
 		self.observable = observable
+		self.noise = noise
+		self.prior = prior
+		self.operation = operation
 		self.nsamples = nsamples
 		self.average = average
 		self.ms = ms
-		self.noise = noise
+		
 		if communicator is None:
 			self.temp = None
 		else:
@@ -103,63 +107,95 @@ class SeriallySampledJTJOperator:
 		self.u = self.observable.generate_vector(STATE)
 		self.m = self.observable.generate_vector(PARAMETER)
 
+	def init_vector(self,x):
+		"""
+        Reshape the Vector :code:`x` so that it is compatible with the Jacobian
+        operator.
+
+        Parameters:
+
+        - :code:`x`: the vector to reshape.
+         """
+        if self.operation = 'JJT':
+            self.observable.init_vector(x,0)
+        elif self.operation == 'JTJ':
+            self.observable.init_vector(x,1)
+        else: 
+            raise
 
 	def matMvMult(self,x,y):
 		'''
 		'''
+		if self.temp is None:
+			temp = dl.Vector(y[0])
+		else:
+			temp = self.temp
 		assert x.nvec() == y.nvec(), "x and y have non-matching number of vectors"
 		if self.ms is None:
 			for i in range(self.nsamples):
+				# Iterate if there are solver issues
 				solved = False
 				while not solved:
 					try:
+						# Sample from the prior
+						self.m.zero()
 						self.noise.zero()
 						parRandom.normal(1,self.noise)
-						# set linearization point
 						self.prior.sample(self.noise,self.m)
-						x = [self.u,self.m,None]
+						# Solve the PDE
+						linearization_x = [self.u,self.m,None]
 						print('Attempting to solve')
-						observable.solveFwd(u,x)
+						observable.solveFwd(u,linearization_x)
 						print('Solution succesful')
-						observable.setLinearizationPoint(x)
-						solved = True
-					except:
-						print('Issue with the solution, moving on')
-						pass
-
-				Ji = ObservableJacobian(observable)
-				JTJi = JTJ(Ji)
-				for j in range(x.nvec()):
-					temp.zero()
-					JTJi.mult(x[j],temp)
-					y[j].axpy(1./self.nsamples, temp)
-			
-		else:
-			nsamples = len(self.ms)
-			for i in range(nsamples):
-				solved = False
-				while not solved:
-					try:
-						self.noise.zero()
-						parRandom.normal(1,self.noise)
 						# set linearization point
-						self.prior.sample(self.noise,mi)
-						x = [self.u,mi,None]
-						print('Attempting to solve')
-						observable.solveFwd(u,x)
-						print('Solution succesful')
-						observable.setLinearizationPoint(x)
+						observable.setLinearizationPoint(linearization_x)
 						solved = True
 					except:
 						print('Issue with the solution, moving on')
 						pass
-
-				Ji = ObservableJacobian(observable)
-				JTJi = JTJ(Ji)
+				# Instance Jacobian operator for this input-output pair
+				if self.operation == 'JTJ':
+					operator_i = JTJ(ObservableJacobian(observable))
+				elif self.operation == 'JJT':
+					operator_i = JJT(ObservableJacobian(observable))
+				# Define action on matrix (as represented by MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
-					JTJi.mult(x[j],temp)
-					y[j].axpy(1./nsamples, temp)
+					operator_i.mult(x[j],temp)
+					if self.average:
+						y[j].axpy(1./self.nsamples, temp)
+					else:
+						y[j].axpy(1., temp)
+		################################################################################
+		# Otherwise m represents points already chosen,
+		# where we assume the solution will hold, and thus we 
+		# do not handle the sampling of m here
+		# This section is mostly for the sake of unit testing
+		else:
+			# Each m should already not run into solver issues
+			nsamples = len(self.ms)
+			for m in self.ms:
+				# Solve the PDE
+				print('Attempting to solve')
+				x = [self.u,m,None]
+				observable.solveFwd(self.u,x)
+				print('Solution succesful')
+				# set linearization point
+				observable.setLinearizationPoint(x)
+				solved = True
+				# Instance Jacobian operator for this input-output pair
+				if self.operation == 'JTJ':
+					operator_i = JTJ(ObservableJacobian(observable))
+				elif self.operation = 'JJT':
+					operator_i = JJT(ObservableJacobian(observable))
+				# Define action on matrix (as represented by MultiVector)
+				for j in range(x.nvec()):
+					temp.zero()
+					operator_i.mult(x[j],temp)
+					if self.average:
+						y[j].axpy(1./self.nsamples, temp)
+					else:
+						y[j].axpy(1., temp)
 
 
 
@@ -199,8 +235,6 @@ class ActiveSubspaceProjector:
 			self.collective = collective
 		else:
 			self.collective = NullCollective()
-
-		
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.observable.problem.Vh[0].mesh(), self.collective)
@@ -273,6 +307,7 @@ class ActiveSubspaceProjector:
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
+					self.m.zero()
 					print('Issue with the solution, moving on')
 					pass
 		if self.parameters['verbose']:
@@ -287,17 +322,10 @@ class ActiveSubspaceProjector:
 
 	def construct_input_subspace(self,prior_preconditioned = True):
 		if self.parameters['serialized_sampling']:
-			self._construct_input_subspace_serialized(prior_preconditioned = prior_preconditioned)
+			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
 			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
 
-	def _construct_input_subspace_serialized(self,prior_preconditioned = True):
-		"""
-		This method implements the input subspace constructor 
-			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
-				The default parameter is True which is customary in active subspace construction
-		"""
-		pass
 
 
 
@@ -355,6 +383,71 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ',ms_given = False):
+		"""
+		This method implements the input subspace constructor 
+			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
+				The default parameter is True which is customary in active subspace construction
+			-:code:`operation` - 
+			-:code:`ms_given` - 
+		"""
+		t0 = time.time()
+		# ms_given is a unit testing case
+		if ms_given:
+			assert self.ms is not None
+			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
+																				ms = self.ms)
+		else:
+			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
+																				nsamples = self.parameters['samples_per_process'])
+		# This averaging assumes every process has an equal number of samples
+		# Otherwise it will bias towards a process with the fewest samples
+		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
+		# Instantiate Gaussian random matrix
+		x_GN = dl.Vector(self.mesh_constructor_comm)
+		Local_Average_Jacobian_Operator.init_vector(x_GN)
+		Omega = MultiVector(x_GN,self.parameters['rank'] + self.parameters['oversampling'])
+
+		if self.collective.rank() == 0:
+			parRandom.normal(1.,Omega)
+		else:
+			Omega.zero()
+
+		self.collective.bcast(Omega,root = 0)
+
+		if operation == 'JTJ':
+			if prior_preconditioned:
+				if hasattr(self.prior, "R"):
+					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+				 		self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+				else:
+					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+				 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+			else:
+				self.d_GN, self.V_GN = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+		elif operation == 'JJT':
+			self.d_NG, self.U_NG = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+
+		self.prior_preconditioned = prior_preconditioned
+		self._input_subspace_construction_time = time.time() - t0
+		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
+			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
+		if True and MPI.COMM_WORLD.rank == 0:
+			if operation == 'JTJ':
+				np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
+				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_GN,\
+					axis_label = ['i',r'$\lambda_i$',\
+					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+			if operation == 'JJT':
+				np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
+				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_GN,\
+					axis_label = ['i',r'$\lambda_i$',\
+					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 	def construct_output_subspace(self,prior_preconditioned = True):
 		if self.parameters['serialized_sampling']:
