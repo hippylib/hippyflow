@@ -11,7 +11,7 @@
 # terms of the GNU General Public License (as published by the Free
 # Software Foundation) version 2.0 dated June 1991.
 
-from .collectiveOperator import CollectiveOperator
+from .collectiveOperator import CollectiveOperator, MatrixMultCollectiveOperator
 
 from .collective import NullCollective, MultipleSerialPDEsCollective, MultipleSamePartitioningPDEsCollective
 

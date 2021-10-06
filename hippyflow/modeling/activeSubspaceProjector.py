@@ -86,9 +86,15 @@ class SeriallySampledJTJOperator:
 	'''
 	Alterantive to SummedListOperator when memory is an issue for active subspace
 	'''
-	def __init__(self,observable,nsamples,communicator=None,average=True):
+	def __init__(self,observable,noise,nsamples = None,ms = None,communicator=None,average=True):
+		'''
+		'''
+		assert (nsamples is not None) or (ms is not None)
 		self.observable = observable
+		self.nsamples = nsamples
 		self.average = average
+		self.ms = ms
+		self.noise = noise
 		if communicator is None:
 			self.temp = None
 		else:
@@ -97,10 +103,63 @@ class SeriallySampledJTJOperator:
 		self.u = self.observable.generate_vector(STATE)
 		self.m = self.observable.generate_vector(PARAMETER)
 
-	def MatMVMult(self,x,y):
-		for i in range(nsamples):
-			pass
-		pass
+
+	def matMvMult(self,x,y):
+		'''
+		'''
+		assert x.nvec() == y.nvec(), "x and y have non-matching number of vectors"
+		if self.ms is None:
+			for i in range(self.nsamples):
+				solved = False
+				while not solved:
+					try:
+						self.noise.zero()
+						parRandom.normal(1,self.noise)
+						# set linearization point
+						self.prior.sample(self.noise,self.m)
+						x = [self.u,self.m,None]
+						print('Attempting to solve')
+						observable.solveFwd(u,x)
+						print('Solution succesful')
+						observable.setLinearizationPoint(x)
+						solved = True
+					except:
+						print('Issue with the solution, moving on')
+						pass
+
+				Ji = ObservableJacobian(observable)
+				JTJi = JTJ(Ji)
+				for j in range(x.nvec()):
+					temp.zero()
+					JTJi.mult(x[j],temp)
+					y[j].axpy(1./self.nsamples, temp)
+			
+		else:
+			nsamples = len(self.ms)
+			for i in range(nsamples):
+				solved = False
+				while not solved:
+					try:
+						self.noise.zero()
+						parRandom.normal(1,self.noise)
+						# set linearization point
+						self.prior.sample(self.noise,mi)
+						x = [self.u,mi,None]
+						print('Attempting to solve')
+						observable.solveFwd(u,x)
+						print('Solution succesful')
+						observable.setLinearizationPoint(x)
+						solved = True
+					except:
+						print('Issue with the solution, moving on')
+						pass
+
+				Ji = ObservableJacobian(observable)
+				JTJi = JTJ(Ji)
+				for j in range(x.nvec()):
+					temp.zero()
+					JTJi.mult(x[j],temp)
+					y[j].axpy(1./nsamples, temp)
 
 
 
@@ -110,8 +169,8 @@ class ActiveSubspaceProjector:
 	We have a forward mapping: :math:`m -> q(m)`
 	And a forward map Jacobian:  :math:`\nabla q(m)`
 	Jacobian SVD: :math:`J = U S V^*`
-	Output active subspace: :math:`J'J = US^2U^*`
-	Input active subspace: :math:`JJ' = VS^2V^*`
+	Output active subspace: :math:`J^*J = US^2U^*`
+	Input active subspace: :math:`JJ^* = VS^2V^*`
 	"""
 	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None,\
 								  parameters = ActiveSubspaceParameterList()):

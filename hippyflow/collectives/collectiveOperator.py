@@ -54,3 +54,37 @@ class CollectiveOperator:
 		"""
 		self.local_op.init_vector(x,dim)
 
+
+class MatrixMultCollectiveOperator(CollectiveOperator):
+	"""
+	"""
+	def __init__(self, local_op, collective, mpi_op = 'sum'):
+		"""
+	    Constructor
+	    	- :code:`local_op` - 
+	    	- :code:`collective` - 
+	    	- :code:`mpi_op` - 
+	    """
+	    super(MatrixMultCollectiveOperator,self).__init__(local_op, collective, mpi_op = 'sum')
+
+	def matMvMult(self, x,y):
+		"""
+		Implements matrix multiplication function for the collective operator
+			- :code:`x` - MultiVector to be multiplied
+			- :code:`y` - storage for multiplication results
+		"""
+		self.local_op.matMvMult(x,y)
+		self.collective.allReduce(y, self.mpi_op)
+
+	def matMvTranspmult(self,x,y):
+		"""
+		Implements matrix transpose multiplication function for the collective operator
+			- :code:`x` - MultiVector to be matrix transpose multiplied
+			- :code:`y` - storage for matrix transpose multiplication results
+		"""
+		assert hasattr(self.local_op, 'MatMvTranspmult')
+		self.local_op.MatMvTranspmult(x,y)
+		self.collective.allReduce(y,self.mpi_op)
+
+
+
