@@ -285,6 +285,8 @@ class ActiveSubspaceProjector:
 		self.d_NG = None
 		self.U_NG = None
 
+		# For unit testing different methods, want to save Omega
+		self.Omega = None
 
 	def _initialize_batched_samples(self):
 		"""
@@ -329,7 +331,7 @@ class ActiveSubspaceProjector:
 
 
 
-	def _construct_input_subspace_batched(self,prior_preconditioned = True):
+	def _construct_input_subspace_batched(self,prior_preconditioned = True,store_Omega = False):
 		"""
 		This method implements the input subspace constructor 
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
@@ -356,10 +358,11 @@ class ActiveSubspaceProjector:
 
 		if self.collective.rank() == 0:
 			parRandom.normal(1.,Omega)
+			self.Omega = Omega
 		else:
 			Omega.zero()
-
 		self.collective.bcast(Omega,root = 0)
+
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
@@ -405,15 +408,17 @@ class ActiveSubspaceProjector:
 		# Otherwise it will bias towards a process with the fewest samples
 		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
 		# Instantiate Gaussian random matrix
-		x_GN = dl.Vector(self.mesh_constructor_comm)
-		Local_Average_Jacobian_Operator.init_vector(x_GN)
-		Omega = MultiVector(x_GN,self.parameters['rank'] + self.parameters['oversampling'])
+		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
+		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
+		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega.zero()
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega)
-		else:
-			Omega.zero()
-
+			if self.Omega is None:
+				parRandom.normal(1.,Omega)
+			else:
+				Omega = self.Omega
+				
 		self.collective.bcast(Omega,root = 0)
 
 		if operation == 'JTJ':
@@ -426,13 +431,16 @@ class ActiveSubspaceProjector:
 				 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 			else:
 				self.d_GN, self.V_GN = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			self.prior_preconditioned = prior_preconditioned
+			self._input_subspace_construction_time = time.time() - t0
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
+				print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
 		elif operation == 'JJT':
 			self.d_NG, self.U_NG = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
-
-		self.prior_preconditioned = prior_preconditioned
-		self._input_subspace_construction_time = time.time() - t0
-		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
-			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
+			self._output_subspace_construction_time = time.time() - t0
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
+				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
+		
 		if True and MPI.COMM_WORLD.rank == 0:
 			if operation == 'JTJ':
 				np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
@@ -442,12 +450,14 @@ class ActiveSubspaceProjector:
 					axis_label = ['i',r'$\lambda_i$',\
 					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 			if operation == 'JJT':
-				np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.V_GN))
-				np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
-				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_GN,\
+				np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
+
+				out_name = self.parameters['output_directory']+'AS_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_NG,\
 					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
 
 	def construct_output_subspace(self,prior_preconditioned = True):
 		if self.parameters['serialized_sampling']:
