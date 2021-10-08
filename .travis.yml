@@ -23,4 +23,5 @@ install:
   # - echo 'What is the problem'
 
 script:
+  - ls -la 
   - python hippyflow/test/test_derivativeSubspace.py
