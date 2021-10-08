@@ -18,7 +18,7 @@ install:
   - git branch matmvmult
   - cd ../
   - export HIPPYLIB_PATH=$(pwd)/hippylib/
-  - export HIPPYFLOW_PATH=$(pwd)/hippyflow/
+  - export HIPPYFLOW_PATH=$(pwd)
 
 script:
   - echo $HIPPYLIB_PATH
