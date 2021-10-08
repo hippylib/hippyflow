@@ -18,11 +18,10 @@ import numpy as np
 
 
 import sys, os
-sys.path.append(os.environ.get('HIPPYFLOW_PATH'))
-# sys.path.append(os.environ.get('HIPPYLIB_PATH'))
+sys.path.append(os.environ.get('HIPPYLIB_PATH'))
 import hippylib as hl
 
-# sys.path.append(os.environ.get('HIPPYFLOW_PATH'))
+sys.path.append(os.environ.get('HIPPYFLOW_PATH'))
 import hippyflow as hf
 
 def u_boundary(x, on_boundary):
