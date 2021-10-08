@@ -23,4 +23,4 @@ install:
   - echo 'What is the problem'
 
 script:
-  - cd hippyflow/test/ && python -m unittest discover -v
+  - python /hippyflow/test/test_derivativeSubspace.py
