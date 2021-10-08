@@ -15,16 +15,9 @@ install:
   - git clone --depth 1 --branch matmvmult https://github.com/hippylib/hippylib.git
   - cd hippylib
   - python setup.py install
-  # - git checkout matmvmult
   - cd ../
   - export HIPPYLIB_PATH=$(pwd)/hippylib/
   - export HIPPYFLOW_PATH=$(pwd)
 
 script:
-  - cd hippylib
-  - git status
-  - cd ../
-  - echo $HIPPYLIB_PATH
-  - echo $HIPPYFLOW_PATH
-  - ls -lt
   - python hippyflow/test/test_derivativeSubspace.py
