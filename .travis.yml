@@ -17,8 +17,8 @@ install:
   - python setup.py install
   - git branch matmvmult
   - cd ../
-  - export HIPPYLIB_PATH=./hippylib/
-  - export HIPPYFLOW_PATH=./hippyflow/
+  - export HIPPYLIB_PATH=$(pwd)/hippylib/
+  - export HIPPYFLOW_PATH=$(pwd)/hippyflow/
   # - ls -lt 
   # - echo 'What is the problem'
 
