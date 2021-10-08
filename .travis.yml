@@ -19,6 +19,8 @@ install:
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
+  - ls -lt 
+  - echo 'What is the problem'
 
 script:
   python ci/run_tests.py

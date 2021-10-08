@@ -21,7 +21,7 @@ import sys, os
 sys.path.append(os.environ.get('HIPPYLIB_PATH'))
 from hippylib import *
 
-sys.path.append('HIPPYFLOW_PATH')
+sys.path.append(os.environ.get('HIPPYFLOW_PATH'))
 from hippyflow import *
 
 def u_boundary(x, on_boundary):
