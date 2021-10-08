@@ -18,4 +18,4 @@ install:
   - export HIPPYLIB_PATH=./hippylib
 
 script:
-  cd hippyflow/test/ && python -m unittest discover -v
+  python ci/run_tests.py
