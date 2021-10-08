@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "O'Leary-Roseberry"
+  given-names: "Thomas"
+  orcid: "https://orcid.org/0000-0002-8938-7074"
+  - family-names: "Villa"
+  given-names: "Umberto"
+title: "hippyflow: Dimension reduced surrogate construction for parametric PDE maps in Python"
+version: 0.1.0
+doi: 10.5281/zenodo.4608729
+date-released: 2021-03-16
+url: "https://github.com/hippylib/hippyflow"
