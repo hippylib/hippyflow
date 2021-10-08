@@ -18,7 +18,7 @@ import numpy as np
 
 
 import sys, os
-sys.path.append( os.environ.get('HIPPYLIB_PATH'))
+sys.path.append('../../')
 from hippylib import *
 
 sys.path.append( os.environ.get('HIPPYFLOW_PATH'))
