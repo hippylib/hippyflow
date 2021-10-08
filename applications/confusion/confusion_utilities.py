@@ -1,3 +1,4 @@
+
 # Copyright (c) 2020-2021, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
@@ -55,7 +56,7 @@ def load_confusion_data(data_dir,rescale = False,derivatives = False,n_data = np
 			appendage_q = npz_data['q_data']
 			m_data = np.concatenate((m_data,appendage_m))
 			q_data = np.concatenate((q_data,appendage_q))
-
+      
 	if n_data < np.inf:
 		assert type(n_data) is int
 		m_data = m_data[:n_data]
