@@ -21,6 +21,9 @@ install:
   - export HIPPYFLOW_PATH=$(pwd)
 
 script:
+  - cd hippylib
+  - git status
+  - cd ../
   - echo $HIPPYLIB_PATH
   - echo $HIPPYFLOW_PATH
   - ls -lt
