@@ -12,10 +12,10 @@ install:
   # - conda info -a
   - conda create -q -n fenics19 -c conda-forge python=$TRAVIS_PYTHON_VERSION fenics==2019.1.0
   - conda activate fenics19
-  - git clone --depth 1 https://github.com/hippylib/hippylib.git
+  - git clone --depth 1 --branch matmvmult https://github.com/hippylib/hippylib.git
   - cd hippylib
   - python setup.py install
-  - git branch matmvmult
+  # - git checkout matmvmult
   - cd ../
   - export HIPPYLIB_PATH=$(pwd)/hippylib/
   - export HIPPYFLOW_PATH=$(pwd)
