@@ -15,7 +15,7 @@ install:
   - git clone --depth 1 https://github.com/hippylib/hippylib.git
   - cd hippylib
   - python setup.py install
-  - git checkout -b tom_dev
+  - git checkout -b matmvmult
   - git status
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
@@ -24,4 +24,4 @@ install:
   # - echo 'What is the problem'
 
 script:
-  python ci/run_tests.py
+  - cd hippyflow/test/ && python -m unittest discover -v

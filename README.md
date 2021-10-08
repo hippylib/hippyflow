@@ -106,7 +106,7 @@ def build_observable(mesh, **kwargs):
 
 	pde = PDEVariationalProblem(Vh, pde_varf, bc, bc0, is_fwd_linear=True)
 
-
+	# Instance observable operator (in this case pointwise observation of state)
 	x_targets = np.linspace(0.1,0.9,10)
 	y_targets = np.linspace(0.1,0.9,10)
 	targets = []
