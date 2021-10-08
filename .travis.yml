@@ -16,7 +16,7 @@ install:
   - cd hippylib
   - python setup.py install
   - git checkout -b matmvmult
-  - git status
+  - echo `git status`
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
