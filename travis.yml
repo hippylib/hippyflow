@@ -1,0 +1,15 @@
+
+sudo: required
+
+services:
+    - docker
+        
+env:
+    # - IMAGE=hippylib/fenics:latest
+    - IMAGE=quay.io/fenicsproject/stable:2019.1.0.r3
+
+# before_install:
+#   - CLONE HIPPYLIB
+#   - set environmental variables 
+
+script: ./ci/run_unittest.sh

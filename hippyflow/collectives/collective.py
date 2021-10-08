@@ -20,27 +20,25 @@ from mpi4py import MPI
 class NullCollective:
     """
     No-overhead "Parallel" reduction utilities when a serial system of PDEs is solved on 1 process.
-    """
-    def __init__(self):
-        pass
-    
+    """    
+    def bcast(self, v, root=0):
+        return v
+        
     def size(self):
         return 1
-    
+
     def rank(self):
         return 0
-    
+
     def allReduce(self, v, op):
-        
+
         if op.lower() not in ["sum", "avg"]:
             err_msg = "Unknown operation *{0}* in NullCollective.allReduce".format(op)
             raise NotImplementedError(err_msg)
-        
-        return v
-
-    def bcast(self, v, root=0):
 
         return v
+
+    
 
     
 class MultipleSamePartitioningPDEsCollective:
