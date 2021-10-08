@@ -21,27 +21,40 @@ def load_helmholtz_data(data_dir,rescale = False,derivatives = False,n_data = np
 
 	m_files = []
 	q_files = []
+	mq_files = []
 	for file in data_files:
 		if 'ms_on_rank_' in file:
 			m_files.append(file)
 		if 'qs_on_rank_' in file:
 			q_files.append(file)
+		if 'mq_on_rank_' in file:
+			mq_files.append(file)
 
-	ranks = [int(file.split(data_dir+'ms_on_rank_')[-1].split('.npy')[0]) for file in m_files]
-
+	if len(mq_files) == 0:
+		ranks = [int(file.split(data_dir+'ms_on_rank_')[-1].split('.npy')[0]) for file in m_files]
+	else:
+		ranks = [int(file.split(data_dir+'mq_on_rank_')[-1].split('.npz')[0]) for file in m_files]
 	max_rank = max(ranks)
 
 	# Serially concatenate data
-	m_data = np.load(data_dir+'ms_on_rank_0.npy')
-	q_data = np.load(data_dir+'qs_on_rank_0.npy')
-	for i in range(1,max_rank+1):
-			appendage_m = np.load(data_dir+'ms_on_rank_'+str(i)+'.npy')
+	if len(mq_files) == 0:
+		m_data = np.load(data_dir+'ms_on_rank_0.npy')
+		q_data = np.load(data_dir+'qs_on_rank_0.npy')
+		for i in range(1,max_rank+1):
+				appendage_m = np.load(data_dir+'ms_on_rank_'+str(i)+'.npy')
+				m_data = np.concatenate((m_data,appendage_m))
+				appendage_q = np.load(data_dir+'qs_on_rank_'+str(i)+'.npy')
+				q_data = np.concatenate((q_data,appendage_q))
+	else:
+		npz_data = np.load(data_dir+'mq_on_rank_0.npz')
+		m_data = npz_data['m_data']
+		q_data = npz_data['q_data']
+		for i in range(1,max_rank+1):
+			npz_data = np.load(data_dir+'mq_on_rank_'+str(i)+'.npz')
+			appendage_m = npz_data['m_data']
+			appendage_q = npz_data['q_data']
 			m_data = np.concatenate((m_data,appendage_m))
-			appendage_q = np.load(data_dir+'qs_on_rank_'+str(i)+'.npy')
 			q_data = np.concatenate((q_data,appendage_q))
-
-	# print('m_data.shape = ',m_data.shape)
-	# print('q_data.shape = ',q_data.shape)
 
 	if n_data < np.inf:
 		assert type(n_data) is int
