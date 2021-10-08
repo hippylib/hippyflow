@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The University of Texas at Austin 
+# Copyright (c) 2020-2021, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -12,5 +12,5 @@
 # Software Foundation) version 2.0 dated June 1991.
 
 
-version_info = (0, 1, 0)
+version_info = (0, 2, 0)
 __version__ = '.'.join([str(x) for x in version_info])

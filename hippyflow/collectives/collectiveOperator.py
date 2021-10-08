@@ -13,15 +13,15 @@
 
 class CollectiveOperator:
 	"""
-    This class implements an MPI parallel version of linear operators
-    """
+	This class implements an MPI parallel version of linear operators
+	"""
 	def __init__(self, local_op, collective, mpi_op = 'sum'):
 		"""
-	    Constructor
-	    	- :code:`local_op` - 
-	    	- :code:`collective` - 
-	    	- :code:`mpi_op` - 
-	    """
+		Constructor
+			- :code:`local_op` - 
+			- :code:`collective` - 
+			- :code:`mpi_op` - 
+		"""
 
 		assert hasattr(local_op,'mult')
 		self.local_op = local_op
@@ -53,4 +53,48 @@ class CollectiveOperator:
 			- :code:`x` - vector to be initialized
 		"""
 		self.local_op.init_vector(x,dim)
+
+
+class MatrixMultCollectiveOperator:
+	"""
+	"""
+	def __init__(self, local_op, collective, mpi_op = 'sum'):
+		"""
+		Constructor
+			- :code:`local_op` - 
+			- :code:`collective` - 
+			- :code:`mpi_op` - 
+		"""
+		assert hasattr(local_op,'matMvMult')
+		self.local_op = local_op
+		self.collective = collective
+		self.mpi_op = mpi_op
+
+	def matMvMult(self, x,y):
+		"""
+		Implements matrix multiplication function for the collective operator
+			- :code:`x` - MultiVector to be multiplied
+			- :code:`y` - storage for multiplication results
+		"""
+		self.local_op.matMvMult(x,y)
+		self.collective.allReduce(y, self.mpi_op)
+
+	def matMvTranspmult(self,x,y):
+		"""
+		Implements matrix transpose multiplication function for the collective operator
+			- :code:`x` - MultiVector to be matrix transpose multiplied
+			- :code:`y` - storage for matrix transpose multiplication results
+		"""
+		assert hasattr(self.local_op, 'MatMvTranspmult')
+		self.local_op.MatMvTranspmult(x,y)
+		self.collective.allReduce(y,self.mpi_op)
+
+	def init_vector(self,x,dim):
+		"""
+		Implements vector constructor for operator
+			- :code:`x` - vector to be initialized
+		"""
+		self.local_op.init_vector(x,dim)
+
+
 

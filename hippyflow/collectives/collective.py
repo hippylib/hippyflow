@@ -1,17 +1,16 @@
-# Copyright (c) 2016-2018, The University of Texas at Austin 
-# & University of California, Merced.
-# Copyright (c) 2019-2021, The University of Texas at Austin 
-# University of California--Merced, Washington University in St. Louis.
+# Copyright (c) 2020-2021, The University of Texas at Austin 
+# & Washington University in St. Louis.
 #
 # All Rights reserved.
 # See file COPYRIGHT for details.
 #
-# This file is part of the hIPPYlib library. For more information and source code
-# availability see https://hippylib.github.io.
+# This file is part of the hIPPYflow package. For more information see
+# https://github.com/hippylib/hippyflow/
 #
-# hIPPYlib is free software; you can redistribute it and/or modify it under the
+# hIPPYflow is free software; you can redistribute it and/or modify it under the
 # terms of the GNU General Public License (as published by the Free
 # Software Foundation) version 2.0 dated June 1991.
+
 
 import dolfin as dl
 import numpy as np
@@ -20,27 +19,25 @@ from mpi4py import MPI
 class NullCollective:
     """
     No-overhead "Parallel" reduction utilities when a serial system of PDEs is solved on 1 process.
-    """
-    def __init__(self):
-        pass
-    
+    """    
+    def bcast(self, v, root=0):
+        return v
+        
     def size(self):
         return 1
-    
+
     def rank(self):
         return 0
-    
+
     def allReduce(self, v, op):
-        
+
         if op.lower() not in ["sum", "avg"]:
             err_msg = "Unknown operation *{0}* in NullCollective.allReduce".format(op)
             raise NotImplementedError(err_msg)
-        
-        return v
-
-    def bcast(self, v, root=0):
 
         return v
+
+    
 
     
 class MultipleSamePartitioningPDEsCollective:

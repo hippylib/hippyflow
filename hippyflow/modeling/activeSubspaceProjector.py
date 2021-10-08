@@ -20,7 +20,8 @@ from mpi4py import MPI
 import time
 
 
-from ..collectives.collectiveOperator import CollectiveOperator
+from ..collectives.collectiveOperator import CollectiveOperator, MatrixMultCollectiveOperator
+from ..collectives.collective import NullCollective
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
 from ..utilities.mv_utilities import mv_to_dense
@@ -40,12 +41,20 @@ def ActiveSubspaceParameterList():
 	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
+
+	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
+														many samples are allocated on one process ']
+	parameters['serialized_sampling']		= [False, 'Boolean for the serialization of sampling on a process\
+													 to reduce memory for large problems']
+
 	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
 	parameters['observable_kwargs'] 		= [{},'kwargs used when instantiating multiple local instances of observables']
 
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
-
+	parameters['save_and_plot']				= [True,'Boolean for saving data and plots (only False for unit testing)']
+	parameters['store_Omega']				= [False,'Boolean for storing Gaussian random matrix (only True for unit testing)']
+	parameters['ms_given']					= [False,'Boolean for passing ms into serialized AS construction (only True for unit testing)']
 	return ParameterList(parameters)
 
 
@@ -76,6 +85,117 @@ class SummedListOperator:
 		else:
 			y.axpy(1.,temp)
 
+class SeriallySampledJacobianOperator:
+	'''
+	Alterantive to SummedListOperator when memory is an issue for active subspace
+	'''
+	def __init__(self,observable,noise,prior,operation = 'JTJ',nsamples = None,ms = None,communicator=None,average=True):
+		'''
+		'''
+		assert operation in ['JTJ','JJT']
+		assert (nsamples is not None) or (ms is not None)
+		self.observable = observable
+		self.noise = noise
+		self.prior = prior
+		self.operation = operation
+		self.nsamples = nsamples
+		self.average = average
+		self.ms = ms
+		
+		if communicator is None:
+			self.temp = None
+		else:
+			self.temp = dl.Vector(communicator)
+
+		self.u = self.observable.generate_vector(STATE)
+		self.m = self.observable.generate_vector(PARAMETER)
+
+	def init_vector(self,x):
+		"""
+		Reshape the Vector :code:`x` so that it is compatible with the Jacobian
+		operator.
+
+		Parameters:
+
+		- :code:`x`: the vector to reshape.
+		 """
+		if self.operation == 'JJT':
+			self.observable.init_vector(x,0)
+		elif self.operation == 'JTJ':
+			self.observable.init_vector(x,1)
+		else: 
+			raise
+
+	def matMvMult(self,x,y):
+		'''
+		'''
+		if self.temp is None:
+			temp = dl.Vector(y[0])
+		else:
+			temp = self.temp
+		assert x.nvec() == y.nvec(), "x and y have non-matching number of vectors"
+		# Instance Jacobian operator for this input-output pair
+		if self.operation == 'JTJ':
+			operator_i = JTJ(ObservableJacobian(self.observable))
+		elif self.operation == 'JJT':
+			operator_i = JJT(ObservableJacobian(self.observable))
+
+		if self.ms is None:
+			for i in range(self.nsamples):
+				# Iterate if there are solver issues
+				solved = False
+				while not solved:
+					try:
+						# Sample from the prior
+						self.m.zero()
+						self.noise.zero()
+						parRandom.normal(1,self.noise)
+						self.prior.sample(self.noise,self.m)
+						# Solve the PDE
+						linearization_x = [self.u,self.m,None]
+						print('Attempting to solve')
+						self.observable.solveFwd(u,linearization_x)
+						print('Solution succesful')
+						# set linearization point
+						self.observable.setLinearizationPoint(linearization_x)
+						solved = True
+					except:
+						print('Issue with the solution, moving on')
+						pass
+				# Define action on matrix (as represented by MultiVector)
+				for j in range(x.nvec()):
+					temp.zero()
+					operator_i.mult(x[j],temp)
+					if self.average:
+						y[j].axpy(1./self.nsamples, temp)
+					else:
+						y[j].axpy(1., temp)
+		################################################################################
+		# Otherwise m represents points already chosen,
+		# where we assume the solution will hold, and thus we 
+		# do not handle the sampling of m here
+		# This section is mostly for the sake of unit testing
+		else:
+			# Each m should already not run into solver issues
+			nsamples = len(self.ms)
+			for m in self.ms:
+				# Solve the PDE
+				print('Attempting to solve')
+				linearization_x = [self.u,m,None]
+				self.observable.solveFwd(self.u,linearization_x)
+				print('Solution succesful')
+				# set linearization point
+				self.observable.setLinearizationPoint(linearization_x)
+				solved = True
+				# Define action on matrix (as represented by MultiVector)
+				for j in range(x.nvec()):
+					temp.zero()
+					operator_i.mult(x[j],temp)
+					if self.average:
+						y[j].axpy(1./nsamples, temp)
+					else:
+						y[j].axpy(1., temp)
+
 
 
 class ActiveSubspaceProjector:
@@ -84,11 +204,11 @@ class ActiveSubspaceProjector:
 	We have a forward mapping: :math:`m -> q(m)`
 	And a forward map Jacobian:  :math:`\nabla q(m)`
 	Jacobian SVD: :math:`J = U S V^*`
-	Output active subspace: :math:`J'J = US^2U^*`
-	Input active subspace: :math:`JJ' = VS^2V^*`
+	Output active subspace: :math:`J^*J = US^2U^*`
+	Input active subspace: :math:`JJ^* = VS^2V^*`
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None,\
-								 initialize_samples = False, parameters = ActiveSubspaceParameterList()):
+	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = NullCollective(),\
+								  parameters = ActiveSubspaceParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -110,12 +230,7 @@ class ActiveSubspaceProjector:
 		else:
 			self.mesh_constructor_comm = self.observable.mpi_comm()
 
-		if collective is not None:
-			self.collective = collective
-		else:
-			self.collective = NullCollective()
-
-		
+		self.collective = collective
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.observable.problem.Vh[0].mesh(), self.collective)
@@ -131,16 +246,9 @@ class ActiveSubspaceProjector:
 		# and avoid the time consuming sample initialization.
 
 
-
-
-
-
-
-
-
-
-
-		if self.parameters['samples_per_process'] > 1:
+		# Here we allocate many copies of the observable if serialized_sampling is not True in the
+		# active subspace parameters
+		if self.parameters['samples_per_process'] > 1 and not self.parameters['serialized_sampling']:
 			assert self.parameters['observable_constructor'] is not None
 			for i in range(self.parameters['samples_per_process']-1):
 				new_observable = self.parameters['observable_constructor'](self.observable.problem.Vh[0].mesh(),**self.parameters['observable_kwargs'])
@@ -149,17 +257,21 @@ class ActiveSubspaceProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-		
-		self.us = None
-		self.ms = None
-		self.Js = None
+		if self.parameters['serialized_sampling']:
+			self.u = None
+			self.m = None
+			self.J = None
+		else:		
+			self.us = None
+			self.ms = None
+			self.Js = None
 
 		# Draw a new sample and set linearization point.
-		if initialize_samples:
-			self.initialize_samples()
+		if self.parameters['initialize_samples']:
+			if not self.parameters['serialized_sampling']:
+				self._initialize_batched_samples()
 
 		
-
 		self.d_GN = None
 		self.V_GN = None
 		self.d_GN_noprior = None
@@ -169,8 +281,11 @@ class ActiveSubspaceProjector:
 		self.d_NG = None
 		self.U_NG = None
 
+		# For unit testing different methods, want to save Omega
+		self.Omega_GN = None
+		self.Omega_NG = None
 
-	def initialize_samples(self):
+	def _initialize_batched_samples(self):
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
@@ -191,6 +306,7 @@ class ActiveSubspaceProjector:
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
+					self.m.zero()
 					print('Issue with the solution, moving on')
 					pass
 		if self.parameters['verbose']:
@@ -204,13 +320,24 @@ class ActiveSubspaceProjector:
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
+		if self.parameters['serialized_sampling']:
+			print('Construction via serialized AS construction')
+			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
+		else:
+			print('Construction via batched AS construction')
+			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
+
+
+
+
+	def _construct_input_subspace_batched(self,prior_preconditioned = True):
 		"""
 		This method implements the input subspace constructor 
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
 				The default parameter is True which is customary in active subspace construction
 		"""
 		if self.Js is None:
-			self.initialize_samples()
+			self._initialize_batched_samples()
 
 		if self.parameters['verbose']:
 			print(80*'#')
@@ -230,18 +357,20 @@ class ActiveSubspaceProjector:
 
 		if self.collective.rank() == 0:
 			parRandom.normal(1.,Omega)
+			if self.parameters['store_Omega']:
+				self.Omega_GN = Omega
 		else:
 			Omega.zero()
-
 		self.collective.bcast(Omega,root = 0)
+
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
 				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
-			 		self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+					self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
 			else:
 				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
-			 		self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 
@@ -249,7 +378,7 @@ class ActiveSubspaceProjector:
 		self._input_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
-		if True and MPI.COMM_WORLD.rank == 0:
+		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
 			np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
 			np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
 
@@ -258,13 +387,93 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
+	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ'):
+		"""
+		This method implements the input subspace constructor 
+			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
+				The default parameter is True which is customary in active subspace construction
+			-:code:`operation` - 
+		"""
+		t0 = time.time()
+		# ms_given is a unit testing case
+		if self.parameters['ms_given']:
+			assert self.ms is not None
+			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
+																				ms = self.ms)
+		else:
+			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
+																				nsamples = self.parameters['samples_per_process'])
+		# This averaging assumes every process has an equal number of samples
+		# Otherwise it will bias towards a process with the fewest samples
+		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
+		# Instantiate Gaussian random matrix
+		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
+		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
+		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega.zero()
 
-	def construct_output_subspace(self):
+		if self.collective.rank() == 0:
+
+			if (operation == 'JTJ' and self.Omega_GN is None) or (operation == 'JJT' and self.Omega_NG is None):
+				parRandom.normal(1.,Omega)
+			else:
+				if operation == 'JTJ':
+					Omega = self.Omega_GN
+				elif operation == 'JJT':
+					Omega = self.Omega_NG
+				
+		self.collective.bcast(Omega,root = 0)
+
+		if operation == 'JTJ':
+			if prior_preconditioned:
+				if hasattr(self.prior, "R"):
+					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+						self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+				else:
+					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+						self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+			else:
+				self.d_GN, self.V_GN = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			self.prior_preconditioned = prior_preconditioned
+			self._input_subspace_construction_time = time.time() - t0
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
+				print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
+		elif operation == 'JJT':
+			self.d_NG, self.U_NG = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			self._output_subspace_construction_time = time.time() - t0
+			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
+				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
+		
+		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
+			if operation == 'JTJ':
+				np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
+				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_GN,\
+					axis_label = ['i',r'$\lambda_i$',\
+					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+			if operation == 'JJT':
+				np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
+
+				out_name = self.parameters['output_directory']+'AS_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				_ = spectrum_plot(self.d_NG,\
+					axis_label = ['i',r'$\lambda_i$',\
+					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+
+	def construct_output_subspace(self,prior_preconditioned = True):
+		if self.parameters['serialized_sampling']:
+			pass
+		else:
+			self._construct_output_subspace_batched(prior_preconditioned = prior_preconditioned)
+
+	def _construct_output_subspace_batched(self):
 		"""
 		This method implements the output subspace constructor 
 		"""
 		if self.Js is None:
-			self.initialize_samples()
+			self._initialize_batched_samples()
 
 		if self.parameters['verbose']:
 			print(80*'#')
@@ -282,6 +491,8 @@ class ActiveSubspaceProjector:
 
 		if self.collective.rank() == 0:
 			parRandom.normal(1.,Omega)
+			if self.parameters['store_Omega']:
+				self.Omega_NG = Omega
 		else:
 			Omega.zero()
 
@@ -290,7 +501,7 @@ class ActiveSubspaceProjector:
 		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
-		if True and MPI.COMM_WORLD.rank == 0:
+		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
 			np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
 			np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
 
