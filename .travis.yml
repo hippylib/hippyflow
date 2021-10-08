@@ -18,6 +18,7 @@ install:
   - python setup.py install
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
+  - export HIPPYFLOW_PATH=.
 
 script:
   python ci/run_tests.py
