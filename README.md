@@ -27,7 +27,7 @@
 			                                                      
                                                       
 
-[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/hippylib/hippyflow)
+[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/github/hippylib/hippyflow)
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
 [![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
 [![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)

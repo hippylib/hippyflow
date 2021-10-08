@@ -21,7 +21,7 @@ install:
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
   - ls -lt 
-  # - echo 'What is the problem'
+  - echo 'What is the problem'
 
 script:
   - cd hippyflow/test/ && python -m unittest discover -v
