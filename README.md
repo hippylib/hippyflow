@@ -27,7 +27,7 @@
 			                                                      
                                                       
 
-[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/tomoleary/hessianlearn)
+[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/hippylib/hippyflow)
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
 [![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
 [![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)
@@ -47,14 +47,14 @@
 
 # Model Based Projectors:
 
-* `hIPPYflow` implements software infrastructure for input and output dimension reduction strategies for parametric mappings governed by PDEs. Given a parametric PDE Variational Problem implemented in `hIPPYlib` (using `FEniCS` for finite element representation), and a PDE observable, this code automates the construction of dominant subspaces of the input and output for these mappings. 
+`hIPPYflow` implements software infrastructure for input and output dimension reduction strategies for parametric mappings governed by PDEs. Given a parametric PDE Variational Problem implemented in `hIPPYlib` (using `FEniCS` for finite element representation), and a PDE observable, this code automates the construction of dominant subspaces of the input and output for these mappings. 
 
 <p align="center">
 	<img src="https://latex.codecogs.com/gif.latex?\underbrace{q(m) = q(u(m))}_{\text{Implicit dependence}} \quad \text{where $u$ depends on $m$ through } \quad \underbrace{R(u,m) = 0}_{\text{Forward Model}}" /> 
 </p>
 
 
-* `hIPPYflow` implements both active subspace (AS) and Karhunen Loeve expansion (KLE) for input dimension reduction. `hIPPYflow` implements proper orthogonal decomposition (POD) for output dimension reduction.
+`hIPPYflow` implements both active subspace (AS) and Karhunen Loeve expansion (KLE) for input dimension reduction. `hIPPYflow` implements proper orthogonal decomposition (POD) for output dimension reduction.
 
 AS computes the dominant eigenvalues of the following operator:
 <p align="center">
@@ -69,14 +69,13 @@ POD computes the dominant eigenvalues of the following operator:
 	<img src="https://latex.codecogs.com/gif.latex? \int_{\mathbb{R}^{d_M}}  q(m) q(m)^T d \nu(m) \in \mathbb{R}^{d_Q \times d_Q}" /> 
 </p>
 
-* These constructs also implement the generation of training data to be used in surrogate construction, as well as projection error tests that exemplify how good the different model projectors are at capturing key information, and help to detect the "intrinsic dimensionality" of the mappings from inputs to outputs.
+These constructs also implement the generation of training data to be used in surrogate construction, as well as projection error tests that exemplify how good the different model projectors are at capturing key information, and help to detect the "intrinsic dimensionality" of the mappings from inputs to outputs.
 
 ## Example Usage (reduced basis construction)
 
 * Install [`hIPPYlib`](https://github.com/hippylib/hippylib), set `HIPPYLIB_PATH`, `HIPPYFLOW_PATH` environmental variables.
 
 ```python
-import unittest 
 import dolfin as dl
 import ufl
 import numpy as np

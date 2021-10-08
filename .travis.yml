@@ -14,13 +14,14 @@ install:
   - conda activate fenics19
   - git clone --depth 1 https://github.com/hippylib/hippylib.git
   - cd hippylib
-  - git checkout -b tom_dev
   - python setup.py install
+  - git checkout -b tom_dev
+  - git status
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
-  - ls -lt 
-  - echo 'What is the problem'
+  # - ls -lt 
+  # - echo 'What is the problem'
 
 script:
   python ci/run_tests.py
