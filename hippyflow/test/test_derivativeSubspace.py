@@ -17,10 +17,8 @@ import ufl
 import numpy as np
 
 
-
-path_to_hippylib = '../../hippylib/'
 import sys, os
-sys.path.append( os.environ.get('HIPPYLIB_PATH',path_to_hippylib))
+sys.path.append( os.environ.get('HIPPYLIB_PATH'))
 from hippylib import *
 
 sys.path.append( os.environ.get('HIPPYFLOW_PATH'))
@@ -95,6 +93,7 @@ class TestDerivativeSubspace(unittest.TestCase):
 		# Construct the subspace via batching
 		AS.construct_input_subspace()
 		d_batch_in = AS.d_GN
+		AS.d_GN = None
 		AS_parameters['serialized_sampling'] = True
 		AS_parameters['ms_given'] = True
 		AS.construct_input_subspace()

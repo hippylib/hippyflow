@@ -1,15 +1,21 @@
+language: python
+python:
+  - "3.7"
+install:
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+  - bash miniconda.sh -b -p $HOME/miniconda
+  - source "$HOME/miniconda/etc/profile.d/conda.sh"
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  # Useful for debugging any issues with conda
+  # - conda info -a
+  - conda create -q -n fenics19 -c conda-forge python=$TRAVIS_PYTHON_VERSION fenics==2019.1.0
+  - conda activate fenics19
+  - git clone --depth 1 --branch 3.0.0 https://github.com/hippylib/hippylib.git
+  - cd hippylib && python setup.py install && cd -
+  - python setup.py install
+  - export HIPPYLIB_PATH=./hippylib
 
-sudo: required
-
-services:
-    - docker
-        
-env:
-    # - IMAGE=hippylib/fenics:latest
-    - IMAGE=quay.io/fenicsproject/stable:2019.1.0.r3
-
-# before_install:
-#   - CLONE HIPPYLIB
-#   - set environmental variables 
-
-script: ./ci/run_unittest.sh
+script:
+  cd hippyflow/test/ && python -m unittest discover -v
