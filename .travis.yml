@@ -20,7 +20,7 @@ install:
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
-  # - ls -lt 
+  - ls -lt 
   # - echo 'What is the problem'
 
 script:
