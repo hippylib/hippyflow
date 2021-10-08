@@ -16,7 +16,6 @@ install:
   - cd hippylib
   - python setup.py install
   - git checkout -b matmvmult
-  - echo `git status`
   - cd ../
   - export HIPPYLIB_PATH=./hippylib
   - export HIPPYFLOW_PATH=.
@@ -24,4 +23,7 @@ install:
   - echo 'What is the problem'
 
 script:
+  - cd hippylib
+  - git checkout -b matmvmult
+  - cd ../
   - cd hippyflow/test/ && python -m unittest discover -v
