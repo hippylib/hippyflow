@@ -24,6 +24,7 @@ install:
   - python setup.py install
   - git branch matmvmult
   - export HIPPYLIB_PATH=$(pwd)/hippylib/
+  - ls -lt 
   - cd hippyflow/
   - export HIPPYFLOW_PATH=$(pwd)/hippyflow/
   - ls -lt 
