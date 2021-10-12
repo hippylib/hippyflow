@@ -142,6 +142,7 @@ class SeriallySampledJacobianOperator:
 
 		if self.ms is None:
 			for i in range(self.nsamples):
+				print('Updating mat vec for sample = ',i)
 				# Iterate if there are solver issues
 				solved = False
 				while not solved:
@@ -321,10 +322,10 @@ class ActiveSubspaceProjector:
 
 	def construct_input_subspace(self,prior_preconditioned = True):
 		if self.parameters['serialized_sampling']:
-			print('Construction via serialized AS construction')
+			print('Construction via serialized AS construction'.center(80))
 			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
-			print('Construction via batched AS construction')
+			print('Construction via batched AS construction'.center(80))
 			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
 
 
@@ -407,7 +408,14 @@ class ActiveSubspaceProjector:
 		# Otherwise it will bias towards a process with the fewest samples
 		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
 		# Instantiate Gaussian random matrix
+		if self.observable.problem.C is None:
+			m_mean = self.prior.mean
+			u_at_mean = self.observable.problem.generate_state()
+			self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+			self.observable.setLinearizationPoint([u_at_mean,m_mean,None])
+
 		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
+
 		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
 		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
 		Omega.zero()
