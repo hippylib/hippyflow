@@ -470,11 +470,11 @@ class ActiveSubspaceProjector:
 					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
 
-	def construct_output_subspace(self,prior_preconditioned = True):
+	def construct_output_subspace(self):
 		if self.parameters['serialized_sampling']:
 			pass
 		else:
-			self._construct_output_subspace_batched(prior_preconditioned = prior_preconditioned)
+			self._construct_output_subspace_batched()
 
 	def _construct_output_subspace_batched(self):
 		"""
