@@ -162,7 +162,7 @@ class PODProjector:
 				for i in range(0,self.parameters['data_per_process']):
 					local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 					local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-				np.savez_compressed('mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+				np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 
 		else:
 
