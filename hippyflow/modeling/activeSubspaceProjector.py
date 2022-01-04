@@ -77,6 +77,7 @@ class SummedListOperator:
 		else:
 			temp = self.temp
 		for op in self.operators:
+			t0 = time.time()
 			op.mult(x,y)
 			temp.axpy(1.,y)
 		y.zero()
@@ -155,8 +156,9 @@ class SeriallySampledJacobianOperator:
 						# Solve the PDE
 						linearization_x = [self.u,self.m,None]
 						print('Attempting to solve')
+						t0 = time.time()
 						self.observable.solveFwd(u,linearization_x)
-						print('Solution succesful')
+						print('Solution succesful, and took ',time.time() - t0,'s') 
 						# set linearization point
 						self.observable.setLinearizationPoint(linearization_x)
 						solved = True
@@ -166,6 +168,7 @@ class SeriallySampledJacobianOperator:
 				# Define action on matrix (as represented by MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
+					t0 = time.time()
 					operator_i.mult(x[j],temp)
 					if self.average:
 						y[j].axpy(1./self.nsamples, temp)
@@ -290,6 +293,7 @@ class ActiveSubspaceProjector:
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
+		t0 = time.time()
 		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
 		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		for u,m,observable in zip(self.us,self.ms,self.observables):
@@ -301,13 +305,11 @@ class ActiveSubspaceProjector:
 					# set linearization point
 					self.prior.sample(self.noise,m)
 					x = [u,m,None]
-					print('Attempting to solve')
 					observable.solveFwd(u,x)
-					print('Solution succesful')
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
-					self.m.zero()
+					m.zero()
 					print('Issue with the solution, moving on')
 					pass
 		if self.parameters['verbose']:
@@ -318,6 +320,10 @@ class ActiveSubspaceProjector:
 			except:
 				print('Install pympler and run again: pip install pympler'.center(80))
 		self.Js = [ObservableJacobian(observable) for observable in self.observables]
+		total_init_time = time.time() - t0
+		for i in range(100):
+			print(80*'#')
+			print('Initializing all batched samples took ',total_init_time, 's ')
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
@@ -364,6 +370,7 @@ class ActiveSubspaceProjector:
 			Omega.zero()
 		self.collective.bcast(Omega,root = 0)
 
+		t0 = time.time()
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
@@ -374,6 +381,10 @@ class ActiveSubspaceProjector:
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+		total_init_time = time.time() - t0
+		for i in range(100):
+			print(80*'#')
+			print('Full active subspace took ',total_init_time, 's ')
 
 		self.prior_preconditioned = prior_preconditioned
 		self._input_subspace_construction_time = time.time() - t0
