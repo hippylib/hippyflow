@@ -157,7 +157,7 @@ class SeriallySampledJacobianOperator:
 						linearization_x = [self.u,self.m,None]
 						print('Attempting to solve')
 						t0 = time.time()
-						self.observable.solveFwd(u,linearization_x)
+						self.observable.solveFwd(self.u,linearization_x)
 						print('Solution succesful, and took ',time.time() - t0,'s') 
 						# set linearization point
 						self.observable.setLinearizationPoint(linearization_x)
