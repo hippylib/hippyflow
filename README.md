@@ -152,6 +152,26 @@ POD.generate_training_data(output_directory)
 * Neural network models are implemented in `keras`. Training can be handled directly by `keras`, or using second order optimizers implemented in `hessianlearn`.
 
 
+## Derivative Informed Projected Neural Networks (DIPNets)
+
+* Active subspace decomposition preserves low dimensional geometry of the parametric mapping.
+
+* Geometry preserving dimension reduction allows for efficient parametrization of neural networks that can generalize well given limited training data.
+
+* Useful for outer-loop applications (e.g. uncertainty quantification, Bayesian inverse problems, Bayesian optimal experimental design, optimization under uncertainty, etc.) where repeated evaluation of expensive PDE-based maps is a major computational bottleneck and limitation in practice.
+
+<p align="center">
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/dipnet.png" width="65%" /> 
+</p>
+
+* Using ResNet for nonlinearity allows for adaptive training, and experimentally superior performance, (DIPResNet)
+
+<p align="center">
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/dipresnet.png" width="65%" /> 
+</p>
+
+
+
 # References
 
 These publications use the hippyflow library
