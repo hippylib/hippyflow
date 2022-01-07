@@ -59,15 +59,15 @@
 
 AS computes the dominant eigenvalue-eigenvector pairs of the following operator:
 <p align="center">
-	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/active_subspace.png" width="75%" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/active_subspace.png" width="70%" /> 
 </p>
 KLE computes the dominant eigenvalue-eigenvector pairs of the covariance of the  parameter distribution 
 <p align="center">
-	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/kle.png" width="75%" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/kle.png" width="50%" /> 
 </p>
 POD computes the dominant eigenvalue-eigenvector pairs of the expectation of the data outer-product matrix:
 <p align="center">
-	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/pod.png" width="75%" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/pod.png" width="65%" /> 
 </p>
 
 These constructs also implement the generation of training data to be used in surrogate construction, as well as projection error tests that exemplify how good the different model projectors are at capturing key information, and help to detect the "intrinsic dimensionality" of the mappings from inputs to outputs.
