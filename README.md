@@ -27,7 +27,7 @@
 			                                                      
                                                       
 
-[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/github/hippylib/hippyflow)
+[![Build Status](https://api.travis-ci.com/hippylib/hippyflow.svg?branch=main)](https://travis-ci.com/github/hippylib/hippyflow)
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
 [![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
 [![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)
@@ -50,7 +50,7 @@
 `hIPPYflow` implements software infrastructure for input and output dimension reduction strategies for parametric mappings governed by PDEs. Given a parametric PDE Variational Problem implemented in `hIPPYlib` (using `FEniCS` for finite element representation), and a PDE observable, this code automates the construction of dominant subspaces of the input and output for these mappings. 
 
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex?\underbrace{q(m) = q(u(m))}_{\text{Implicit dependence}} \quad \text{where $u$ depends on $m$ through } \quad \underbrace{R(u,m) = 0}_{\text{Forward Model}}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.pdf" /> 
 </p>
 
 
