@@ -167,3 +167,15 @@ Computer Methods in Applied Mechanics and Engineering (accepted).
 }
 }</pre></details>
 
+- \[2\] O'Leary-Roseberry, T., Du, X., Chaudhuri, A., Martins, J., Willcox, K., Ghattas, O.,
+[**Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data**](https://arxiv.org/abs/2112.07096).
+arXiv:2112.07096.
+([Download](https://arxiv.org/pdf/2112.07096.pdf))<details><summary>BibTeX</summary><pre>
+@article{OLearyRoseberryDuChaudhuriEtAl2021,
+  title={Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data},
+  author={O'Leary-Roseberry, Thomas and Du, Xiaosong, and Chaudhuri, Anirban, and Martins Joaqium R. R. A., and Willcox, Karen, and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2112.07096},
+  year={2021}
+}
+}</pre></details>
+
