@@ -49,8 +49,9 @@
 
 `hIPPYflow` implements software infrastructure for input and output dimension reduction strategies for parametric mappings governed by PDEs. Given a parametric PDE Variational Problem implemented in `hIPPYlib` (using `FEniCS` for finite element representation), and a PDE observable, this code automates the construction of dominant subspaces of the input and output for these mappings. 
 
+
 <p align="center">
-	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.pdf" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.png" width="55%" /> 
 </p>
 
 
