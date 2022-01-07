@@ -51,23 +51,23 @@
 
 
 <p align="center">
-	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.png" width="55%" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.png" width="75%" /> 
 </p>
 
 
 `hIPPYflow` implements both active subspace (AS) and Karhunen Loeve expansion (KLE) for input dimension reduction. `hIPPYflow` implements proper orthogonal decomposition (POD) for output dimension reduction.
 
-AS computes the dominant eigenvalues of the following operator:
+AS computes the dominant eigenvalue-eigenvector pairs of the following operator:
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \int_{\mathbb{R}^{d_M}} \nabla q(m)^T \nabla q(m) d \nu(m) \in \mathbb{R}^{d_M \times d_M}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/active_subspace.png" width="75%" /> 
 </p>
-KLE computes the dominant eigenvectors of the covariance of the  parameter distribution 
+KLE computes the dominant eigenvalue-eigenvector pairs of the covariance of the  parameter distribution 
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \text{Cov}(\nu(m))" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/kle.png" width="75%" /> 
 </p>
-POD computes the dominant eigenvalues of the following operator:
+POD computes the dominant eigenvalue-eigenvector pairs of the expectation of the data outer-product matrix:
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \int_{\mathbb{R}^{d_M}}  q(m) q(m)^T d \nu(m) \in \mathbb{R}^{d_Q \times d_Q}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/pod.png" width="75%" /> 
 </p>
 
 These constructs also implement the generation of training data to be used in surrogate construction, as well as projection error tests that exemplify how good the different model projectors are at capturing key information, and help to detect the "intrinsic dimensionality" of the mappings from inputs to outputs.
