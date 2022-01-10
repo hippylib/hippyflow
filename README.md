@@ -177,14 +177,17 @@ POD.generate_training_data(output_directory)
 These publications use the hippyflow library
 
 - \[1\] O'Leary-Roseberry, T., Villa, U., Chen P., Ghattas O.,
-[**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://arxiv.org/abs/2011.15110).
-Computer Methods in Applied Mechanics and Engineering (accepted).
+[**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://www.sciencedirect.com/science/article/pii/S0045782521005302).
+Computer Methods in Applied Mechanics and Engineering. Volume 388, 1 January 2022, 114199.
 ([Download](https://arxiv.org/pdf/2011.15110.pdf))<details><summary>BibTeX</summary><pre>
-@article{o2020derivative,
-  title={Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs},
-  author={O'Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
+@article{OLearyRoseberryVillaChenEtAl2022,
+  title={Derivative-informed projected neural networks for high-dimensional parametric maps governed by {PDE}s},
+  author={O’Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
   journal={Computer Methods in Applied Mechanics and Engineering},
-  year={2021}
+  volume={388},
+  pages={114199},
+  year={2022},
+  publisher={Elsevier}
 }
 }</pre></details>
 
