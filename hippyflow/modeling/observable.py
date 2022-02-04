@@ -264,7 +264,7 @@ class LinearStateObservable:
 
 def hippylibModelLinearStateObservable(model):
 	"""
-	This class construcst a linear state observable from
+	This function construcst a linear state observable from
 	hIPPYlib.modeling.model.Model attributes
 	Parameters:
 		- :code:`model` represents the hippylib mode
