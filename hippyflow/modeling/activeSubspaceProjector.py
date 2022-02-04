@@ -44,7 +44,7 @@ def ActiveSubspaceParameterList():
 
 	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
 														many samples are allocated on one process ']
-	parameters['serialized_sampling']		= [False, 'Boolean for the serialization of sampling on a process\
+	parameters['serialized_sampling']		= [True, 'Boolean for the serialization of sampling on a process\
 													 to reduce memory for large problems']
 
 	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
@@ -235,6 +235,7 @@ class ActiveSubspaceProjector:
 			self.mesh_constructor_comm = self.observable.mpi_comm()
 
 		self.collective = collective
+		print(collective)
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.observable.problem.Vh[0].mesh(), self.collective)
