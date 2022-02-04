@@ -25,7 +25,7 @@ from .maternPrior import BiLaplacian2D, Laplacian2D
 
 from .multiPDEProblem import MultiPDEProblem
 
-from .observable import LinearStateObservable, DomainRestrictedOperator
+from .observable import LinearStateObservable, DomainRestrictedOperator, hippylibModelLinearStateObservable
 
 from .PODProjector import PODProjector, PODParameterList
 
