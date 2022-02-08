@@ -17,9 +17,13 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
+from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperParameterList
+
 from .jacobian import Jacobian, ObservableJacobian, JJT, JTJ
 
 from .KLEProjector import KLEProjector, KLEParameterList
+
+from .lowRankRectangularOperator import LowRankRectangularOperator
 
 from .maternPrior import BiLaplacian2D, Laplacian2D
 
