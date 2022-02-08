@@ -20,7 +20,10 @@ import time
 import warnings
 
 import hippylib as hl
-from hippyflow import hippylibModelLinearStateObservable, ObservableJacobian, mv_to_dense, dense_to_mv_local
+
+from .observable import hippylibModelLinearStateObservable
+from .jacobian import ObservableJacobian
+from ..utilities.mv_utilities import mv_to_dense, dense_to_mv_local
 
 def hippylibModelWrapperParameterList():
 	"""
