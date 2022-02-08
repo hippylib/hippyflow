@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, The University of Texas at Austin 
+# Copyright (c) 2020-2022, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -261,3 +261,15 @@ class LinearStateObservable:
 		..note:: This routine assumes that :code:`out` has the correct shape.
 		"""
 		self.problem.apply_ij(PARAMETER,ADJOINT, dp, out)
+
+def hippylibModelLinearStateObservable(model):
+	"""
+	This function construcst a linear state observable from
+	hIPPYlib.modeling.model.Model attributes
+	Parameters:
+		- :code:`model` represents the hippylib mode
+	"""
+	assert hasattr(model,'misfit')
+	return LinearStateObservable(model.problem,model.misfit.B)
+
+

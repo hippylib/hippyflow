@@ -27,7 +27,7 @@
 			                                                      
                                                       
 
-[![Build Status](https://travis-ci.com/hippylib/hippyflow.svg?branch=master)](https://travis-ci.com/github/hippylib/hippyflow)
+[![Build Status](https://api.travis-ci.com/hippylib/hippyflow.svg?branch=main)](https://travis-ci.com/github/hippylib/hippyflow)
 [![DOI](https://zenodo.org/badge/301823282.svg)](https://zenodo.org/badge/latestdoi/301823282)
 [![License](https://img.shields.io/github/license/hippylib/hippyflow)](./LICENSE.md)
 [![Top language](https://img.shields.io/github/languages/top/hippylib/hippyflow)](https://www.python.org)
@@ -49,24 +49,25 @@
 
 `hIPPYflow` implements software infrastructure for input and output dimension reduction strategies for parametric mappings governed by PDEs. Given a parametric PDE Variational Problem implemented in `hIPPYlib` (using `FEniCS` for finite element representation), and a PDE observable, this code automates the construction of dominant subspaces of the input and output for these mappings. 
 
+
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex?\underbrace{q(m) = q(u(m))}_{\text{Implicit dependence}} \quad \text{where $u$ depends on $m$ through } \quad \underbrace{R(u,m) = 0}_{\text{Forward Model}}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/parametric_mapping.png" width="75%" /> 
 </p>
 
 
 `hIPPYflow` implements both active subspace (AS) and Karhunen Loeve expansion (KLE) for input dimension reduction. `hIPPYflow` implements proper orthogonal decomposition (POD) for output dimension reduction.
 
-AS computes the dominant eigenvalues of the following operator:
+AS computes the dominant eigenvalue-eigenvector pairs of the following operator:
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \int_{\mathbb{R}^{d_M}} \nabla q(m)^T \nabla q(m) d \nu(m) \in \mathbb{R}^{d_M \times d_M}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/active_subspace.png" width="70%" /> 
 </p>
-KLE computes the dominant eigenvectors of the covariance of the  parameter distribution 
+KLE computes the dominant eigenvalue-eigenvector pairs of the covariance of the  parameter distribution 
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \text{Cov}(\nu(m))" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/kle.png" width="50%" /> 
 </p>
-POD computes the dominant eigenvalues of the following operator:
+POD computes the dominant eigenvalue-eigenvector pairs of the expectation of the data outer-product matrix:
 <p align="center">
-	<img src="https://latex.codecogs.com/gif.latex? \int_{\mathbb{R}^{d_M}}  q(m) q(m)^T d \nu(m) \in \mathbb{R}^{d_Q \times d_Q}" /> 
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/pod.png" width="65%" /> 
 </p>
 
 These constructs also implement the generation of training data to be used in surrogate construction, as well as projection error tests that exemplify how good the different model projectors are at capturing key information, and help to detect the "intrinsic dimensionality" of the mappings from inputs to outputs.
@@ -146,9 +147,30 @@ POD.generate_training_data(output_directory)
 
 # Dimension Reduced Neural Network Strategies
 
+
 * Given information about dominant subspaces of the input and output spaces for the parametric mappings, `hIPPYflow` implements dimension reduced neural network surrogates. These surrogates allow for parsimonious representations of input-output mappings that can achieve good accuracy for very few training data. Few data is a key feature of many high dimensional PDE based inference problems. 
 
 * Neural network models are implemented in `keras`. Training can be handled directly by `keras`, or using second order optimizers implemented in `hessianlearn`.
+
+
+## Derivative Informed Projected Neural Networks (DIPNets)
+
+* Active subspace decomposition preserves low dimensional geometry of the parametric mapping.
+
+* Geometry preserving dimension reduction allows for efficient parametrization of neural networks that can generalize well given limited training data.
+
+* Useful for outer-loop applications (e.g. uncertainty quantification, Bayesian inverse problems, Bayesian optimal experimental design, optimization under uncertainty, etc.) where repeated evaluation of expensive PDE-based maps is a major computational bottleneck and limitation in practice.
+
+<p align="center">
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/dipnet.png" width="65%" /> 
+</p>
+
+* Using ResNet for nonlinearity allows for adaptive training, and experimentally superior performance, (DIPResNet)
+
+<p align="center">
+	<img src="https://github.com/tomoleary/images/blob/main/hippyflow/dipresnet.png" width="65%" /> 
+</p>
+
 
 
 # References
@@ -156,13 +178,29 @@ POD.generate_training_data(output_directory)
 These publications use the hippyflow library
 
 - \[1\] O'Leary-Roseberry, T., Villa, U., Chen P., Ghattas O.,
-[**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://arxiv.org/abs/2011.15110).
-Computer Methods in Applied Mechanics and Engineering (accepted).
+
+[**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://www.sciencedirect.com/science/article/pii/S0045782521005302).
+Computer Methods in Applied Mechanics and Engineering. Volume 388, 1 January 2022, 114199.
 ([Download](https://arxiv.org/pdf/2011.15110.pdf))<details><summary>BibTeX</summary><pre>
-@article{o2020derivative,
-  title={Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs},
-  author={O'Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
+@article{OLearyRoseberryVillaChenEtAl2022,
+  title={Derivative-informed projected neural networks for high-dimensional parametric maps governed by {PDE}s},
+  author={O’Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
   journal={Computer Methods in Applied Mechanics and Engineering},
+  volume={388},
+  pages={114199},
+  year={2022},
+  publisher={Elsevier}
+}
+}</pre></details>
+
+- \[2\] O'Leary-Roseberry, T., Du, X., Chaudhuri, A., Martins, J., Willcox, K., Ghattas, O.,
+[**Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data**](https://arxiv.org/abs/2112.07096).
+arXiv:2112.07096.
+([Download](https://arxiv.org/pdf/2112.07096.pdf))<details><summary>BibTeX</summary><pre>
+@article{OLearyRoseberryDuChaudhuriEtAl2021,
+  title={Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data},
+  author={O'Leary-Roseberry, Thomas and Du, Xiaosong, and Chaudhuri, Anirban, and Martins Joaqium R. R. A., and Willcox, Karen, and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2112.07096},
   year={2021}
 }
 }</pre></details>

@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, The University of Texas at Austin 
+# Copyright (c) 2020-2022, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -157,12 +157,12 @@ class PODProjector:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
 			if compress_files:
-				local_ms = np.zeros(self.parameters['data_per_process'],m_shape)
-				local_qs = np.zeros(self.parameters['data_per_process'],q_shape)
+				local_ms = np.zeros((self.parameters['data_per_process'],m_shape))
+				local_qs = np.zeros((self.parameters['data_per_process'],q_shape))
 				for i in range(0,self.parameters['data_per_process']):
 					local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 					local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-				np.savez_compressed('mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+				np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 
 		else:
 

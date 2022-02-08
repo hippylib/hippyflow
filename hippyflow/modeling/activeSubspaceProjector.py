@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, The University of Texas at Austin 
+# Copyright (c) 2020-2022, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -44,7 +44,7 @@ def ActiveSubspaceParameterList():
 
 	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
 														many samples are allocated on one process ']
-	parameters['serialized_sampling']		= [False, 'Boolean for the serialization of sampling on a process\
+	parameters['serialized_sampling']		= [True, 'Boolean for the serialization of sampling on a process\
 													 to reduce memory for large problems']
 
 	parameters['observable_constructor'] 	= [None,'observable constructor function, assumed to take a mesh, and kwargs']
@@ -77,6 +77,7 @@ class SummedListOperator:
 		else:
 			temp = self.temp
 		for op in self.operators:
+			t0 = time.time()
 			op.mult(x,y)
 			temp.axpy(1.,y)
 		y.zero()
@@ -154,8 +155,9 @@ class SeriallySampledJacobianOperator:
 						# Solve the PDE
 						linearization_x = [self.u,self.m,None]
 						print('Attempting to solve')
-						self.observable.solveFwd(u,linearization_x)
-						print('Solution succesful')
+						t0 = time.time()
+						self.observable.solveFwd(self.u,linearization_x)
+						print('Solution succesful, and took ',time.time() - t0,'s') 
 						# set linearization point
 						self.observable.setLinearizationPoint(linearization_x)
 						solved = True
@@ -165,6 +167,7 @@ class SeriallySampledJacobianOperator:
 				# Define action on matrix (as represented by MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
+					t0 = time.time()
 					operator_i.mult(x[j],temp)
 					if self.average:
 						y[j].axpy(1./self.nsamples, temp)
@@ -289,6 +292,7 @@ class ActiveSubspaceProjector:
 		"""
 		This method initializes the samples from the prior used in sampling
 		"""
+		t0 = time.time()
 		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
 		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		for u,m,observable in zip(self.us,self.ms,self.observables):
@@ -300,13 +304,11 @@ class ActiveSubspaceProjector:
 					# set linearization point
 					self.prior.sample(self.noise,m)
 					x = [u,m,None]
-					print('Attempting to solve')
 					observable.solveFwd(u,x)
-					print('Solution succesful')
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
-					self.m.zero()
+					m.zero()
 					print('Issue with the solution, moving on')
 					pass
 		if self.parameters['verbose']:
@@ -317,14 +319,18 @@ class ActiveSubspaceProjector:
 			except:
 				print('Install pympler and run again: pip install pympler'.center(80))
 		self.Js = [ObservableJacobian(observable) for observable in self.observables]
+		total_init_time = time.time() - t0
+		for i in range(100):
+			print(80*'#')
+			print('Initializing all batched samples took ',total_init_time, 's ')
 
 
 	def construct_input_subspace(self,prior_preconditioned = True):
 		if self.parameters['serialized_sampling']:
-			print('Construction via serialized AS construction')
+			print('Construction via serialized AS construction'.center(80))
 			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
-			print('Construction via batched AS construction')
+			print('Construction via batched AS construction'.center(80))
 			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
 
 
@@ -363,6 +369,7 @@ class ActiveSubspaceProjector:
 			Omega.zero()
 		self.collective.bcast(Omega,root = 0)
 
+		t0 = time.time()
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
@@ -373,6 +380,10 @@ class ActiveSubspaceProjector:
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
 			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+		total_init_time = time.time() - t0
+		for i in range(100):
+			print(80*'#')
+			print('Full active subspace took ',total_init_time, 's ')
 
 		self.prior_preconditioned = prior_preconditioned
 		self._input_subspace_construction_time = time.time() - t0
@@ -407,7 +418,14 @@ class ActiveSubspaceProjector:
 		# Otherwise it will bias towards a process with the fewest samples
 		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
 		# Instantiate Gaussian random matrix
+		if self.observable.problem.C is None:
+			m_mean = self.prior.mean
+			u_at_mean = self.observable.problem.generate_state()
+			self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+			self.observable.setLinearizationPoint([u_at_mean,m_mean,None])
+
 		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
+
 		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
 		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
 		Omega.zero()
@@ -461,12 +479,11 @@ class ActiveSubspaceProjector:
 					axis_label = ['i',r'$\lambda_i$',\
 					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
-
-	def construct_output_subspace(self,prior_preconditioned = True):
+	def construct_output_subspace(self):
 		if self.parameters['serialized_sampling']:
 			pass
 		else:
-			self._construct_output_subspace_batched(prior_preconditioned = prior_preconditioned)
+			self._construct_output_subspace_batched()
 
 	def _construct_output_subspace_batched(self):
 		"""

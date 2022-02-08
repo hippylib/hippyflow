@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2021, The University of Texas at Austin 
+# Copyright (c) 2020-2022, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -29,7 +29,7 @@ from .maternPrior import BiLaplacian2D, Laplacian2D
 
 from .multiPDEProblem import MultiPDEProblem
 
-from .observable import LinearStateObservable, DomainRestrictedOperator
+from .observable import LinearStateObservable, DomainRestrictedOperator, hippylibModelLinearStateObservable
 
 from .PODProjector import PODProjector, PODParameterList
 
