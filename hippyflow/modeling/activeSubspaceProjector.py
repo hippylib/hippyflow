@@ -35,6 +35,7 @@ def ActiveSubspaceParameterList():
 	"""
 	parameters = {}
 	parameters['samples_per_process'] 		= [64, 'Number of samples per process']
+	parameters['jacobian_data_per_process'] = [512, 'Number of samples per process']
 	parameters['error_test_samples'] 		= [50, 'Number of samples for error test']
 	parameters['rank'] 				 		= [128, 'Rank of subspace']
 	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
@@ -530,7 +531,7 @@ class ActiveSubspaceProjector:
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
 		if self.parameters['serialized_sampling']:
-			pass
+			self._construct_low_rank_Jacobians_batched(cehck_for_data = check_for_data,compress_files = compress_files)
 		else:
 			self._construct_low_rank_Jacobians_batched(cehck_for_data = check_for_data)
 
@@ -569,7 +570,7 @@ class ActiveSubspaceProjector:
 			print('Data check not yet implemented :('.center(80))
 			pass
 		t0 = time.time()
-		for i in range(last_datum_generated,self.parameters['data_per_process']):
+		for i in range(last_datum_generated,self.parameters['jacobian_data_per_process']):
 			print(('Generating data number '+str(i)).center(80))
 			parRandom.normal(1,self.noise)
 			self.m.zero() # This is probably redundant
@@ -599,19 +600,19 @@ class ActiveSubspaceProjector:
 		if compress_files:
 			print('Compressing mq data'.center(80))
 			t_start_mq = time.time()
-			local_ms = np.zeros((self.parameters['data_per_process'],m_shape))
-			local_qs = np.zeros((self.parameters['data_per_process'],q_shape))
-			for i in range(0,self.parameters['data_per_process']):
+			local_ms = np.zeros((self.parameters['jacobian_data_per_process'],m_shape))
+			local_qs = np.zeros((self.parameters['jacobian_data_per_process'],q_shape))
+			for i in range(0,self.parameters['jacobian_data_per_process']):
 				local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 				local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
 			np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 			print(('mq compression took '+str(time.time()-t_start_mq)+' s '))
 			t_start_J = time.time()
 			print('Compressing Jacobian data'.center(80))
-			locals_Us = np.zeros((self.parameters['data_per_process'],output_dimension,rank))
-			local_simas = np.zeros((self.parameters['data_per_process'],rank))
-			local_Vs = np.zeros((self.parameters['data_per_process'],input_dimension,rank))
-			for i in range(0,self.parameters['data_per_process']):
+			locals_Us = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension,rank))
+			local_simas = np.zeros((self.parameters['jacobian_data_per_process'],rank))
+			local_Vs = np.zeros((self.parameters['jacobian_data_per_process'],input_dimension,rank))
+			for i in range(0,self.parameters['jacobian_data_per_process']):
 				local_Us[i] = np.load(jacobian_rank_specific_directory+'U_sample_'+str(i)+'.npy')
 				local_sigmas[i] = np.load(jacobian_rank_specific_directory+'sigma_sample_'+str(i)+'.npy')
 				local_Vs[i] = np.load(jacobian_rank_specific_directory+'V_sample_'+str(i)+'.npy')
