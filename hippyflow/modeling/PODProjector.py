@@ -136,16 +136,11 @@ class PODProjector:
 				print('Generating data number '+str(i))
 				parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,self.m)
-				
 				self.u.zero()
 				self.u.axpy(1.,self.u_at_mean)
-				x = [self.u,self.m,None]
-				self.observable.setLinearizationPoint(x)
-				solution = self.observable.eval(self.m).get_local()
 				try:
-					solution = self.observable.eval(self.m).get_local()
+					this_q = self.observable.eval(self.m).get_local()
 					this_m = self.m.get_local()
-					this_q = solution
 					np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
 					np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
 					# If there is an issue with the solve move on

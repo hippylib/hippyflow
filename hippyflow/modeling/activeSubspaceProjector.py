@@ -481,7 +481,8 @@ class ActiveSubspaceProjector:
 
 	def construct_output_subspace(self):
 		if self.parameters['serialized_sampling']:
-			pass
+			print('Construction via serialized construction'.center(80))
+			self._construct_serialized_jacobian_subspace(operation = 'JJT')
 		else:
 			self._construct_output_subspace_batched()
 
@@ -527,25 +528,120 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
-	def construct_low_rank_Jacobians(self,output_directory = 'data/jacobian_data/',check_for_data = True):
+	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
+		if self.parameters['serialized_sampling']:
+			pass
+		else:
+			self._construct_low_rank_Jacobians_batched(cehck_for_data = check_for_data)
+
+	def _construct_low_rank_Jacobians_batched(self,check_for_data = True,compress_files = True):
 		"""
 		This method generates low rank Jacobians for training (and also saves input output data in tandem)
-			- :code:`output_directory` - a string specifying the path to the directory where data
-			will be saved
 			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
 			data already exists in directory specified by :code:`output_directory`.
 		Note that this method also saves the input output data and saves them to a directory that 
 		is by default a jacobian_data/ directory
 		This allows for separate sampling for l2 loss and h1 seminorm loss
 		"""
+		my_rank = int(self.collective.rank())
+		jacobian_rank_specific_directory = self.parameters['output_directory']+'jacobian_data/proc_'+str(my_rank)+'/'
+		os.makedirs(jacobian_rank_specific_directory,exist_ok = True)
+		rank_specific_directory = self.parameters['output_directory']+'data_on_rank_'+str(my_rank)+'/'
+
+		self.J = ObservableJacobian(self.observable)
+
+		last_datum_generated = 0
+		output_dimension,input_dimension = self.J.shape
+		rank = min(self.parameters['rank'],output_dimension,input_dimension)
+		# Initialize randomized Omega
+		input_vector = dl.Vector(self.mesh_constructor_comm)
+		self.Js[0].init_vector(input_vector,1)
+		Omega = MultiVector(input_vector,rank + self.parameters['oversampling'])
+		# Omega does not need to be communicated across processes in this case
+		# like with the global reduction collectives
+		# Omega can be the same for all samples
+		parRandom.normal(1.,Omega)
+
+		if check_for_data:
+			# Find largest mq pair generated
+
+			# Find largest Jacobian generated
+			print('Data check not yet implemented :('.center(80))
+			pass
+		t0 = time.time()
+		for i in range(last_datum_generated,self.parameters['data_per_process']):
+			print(('Generating data number '+str(i)).center(80))
+			parRandom.normal(1,self.noise)
+			self.m.zero() # This is probably redundant
+			self.prior.sample(self.noise,self.m)
+			x = [self.u,self.m,None]
+			self.observable.solveFwd(self.u,x)
+			self.observable.setLinearizationPoint(x)
+			this_m = self.m.get_local()
+			this_q = self.observable.evalu(self.u).get_local()
+
+			np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
+			np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
+
+			Omega.zero() # probably unecessary
+			parRandom.normal(1.,Omega)
+			U, sigma, V = accuracyEnhancedSVD(self.J,Omega,rank,s=1)
+			Unp = mv_to_dense(U)
+			Vnp = mv_to_dense(V)
+
+			np.save(jacobian_rank_specific_directory+'U_sample_'+str(i)+'.npy',Unp)
+			np.save(jacobian_rank_specific_directory+'sigma_sample_'+str(i)+'.npy',sigma)
+			np.save(jacobian_rank_specific_directory+'V_sample_'+str(i)+'.npy',Vnp)
+
+			if self.parameters['verbose']:
+				print('One (m,q,J) generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+
+		if compress_files:
+			print('Compressing mq data'.center(80))
+			t_start_mq = time.time()
+			local_ms = np.zeros((self.parameters['data_per_process'],m_shape))
+			local_qs = np.zeros((self.parameters['data_per_process'],q_shape))
+			for i in range(0,self.parameters['data_per_process']):
+				local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
+				local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
+			np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+			print(('mq compression took '+str(time.time()-t_start_mq)+' s '))
+			t_start_J = time.time()
+			print('Compressing Jacobian data'.center(80))
+			locals_Us = np.zeros((self.parameters['data_per_process'],output_dimension,rank))
+			local_simas = np.zeros((self.parameters['data_per_process'],rank))
+			local_Vs = np.zeros((self.parameters['data_per_process'],input_dimension,rank))
+			for i in range(0,self.parameters['data_per_process']):
+				local_Us[i] = np.load(jacobian_rank_specific_directory+'U_sample_'+str(i)+'.npy')
+				local_sigmas[i] = np.load(jacobian_rank_specific_directory+'sigma_sample_'+str(i)+'.npy')
+				local_Vs[i] = np.load(jacobian_rank_specific_directory+'V_sample_'+str(i)+'.npy')
+			np.savez_compressed(output_directory+'J_on_rank'+str(my_rank)+'.npz',\
+						U_data = local_Us,sigma_data = local_sigmas,V_data = local_Vs)
+			print(('Jacobian compression took '+str(time.time()-t_start_J)+' s '))
+
+			if True:
+				out_name = self.parameters['output_directory']+'jacobian_singular_values_'+str(rank)+'.pdf'
+				plot_singular_values_with_std(np.mean(local_sigmas,axis=0),np.std(local_sigmas,axis=0),outname= out_name)
+
+		self._jacobian_data_generation_time = time.time() - t0
+
+
+	def _construct_low_rank_Jacobians_batched(self,check_for_data = True):
+		"""
+		This method generates low rank Jacobians for training (and also saves input output data in tandem)
+			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
+			data already exists in directory specified by :code:`output_directory`.
+		Note that this method also saves the input output data and saves them to a directory that 
+		is by default a jacobian_data/ directory
+		This allows for separate sampling for l2 loss and h1 seminorm loss
+		"""
+
 		if self.Js is None:
 			self.initialize_samples()
 
 		my_rank = int(self.collective.rank())
-		try:
-			os.makedirs(output_directory)
-		except:
-			pass
+		output_directory = self.parameters['output_directory']+'jacobian_data/'
+		os.makedirs(output_directory,exist_ok = True)
 
 		last_datum_generated = 0
 		output_dimension,input_dimension = self.Js[0].shape
