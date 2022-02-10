@@ -531,11 +531,11 @@ class ActiveSubspaceProjector:
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
 		if self.parameters['serialized_sampling']:
-			self._construct_low_rank_Jacobians_batched(cehck_for_data = check_for_data,compress_files = compress_files)
+			self._construct_low_rank_Jacobians_serial(check_for_data = check_for_data,compress_files = compress_files)
 		else:
-			self._construct_low_rank_Jacobians_batched(cehck_for_data = check_for_data)
+			self._construct_low_rank_Jacobians_batched(check_for_data = check_for_data)
 
-	def _construct_low_rank_Jacobians_batched(self,check_for_data = True,compress_files = True):
+	def _construct_low_rank_Jacobians_serial(self,check_for_data = True,compress_files = True):
 		"""
 		This method generates low rank Jacobians for training (and also saves input output data in tandem)
 			- :code:`check_for_data` - a boolean to decide whether to check to see if the training
@@ -548,6 +548,11 @@ class ActiveSubspaceProjector:
 		jacobian_rank_specific_directory = self.parameters['output_directory']+'jacobian_data/proc_'+str(my_rank)+'/'
 		os.makedirs(jacobian_rank_specific_directory,exist_ok = True)
 		rank_specific_directory = self.parameters['output_directory']+'data_on_rank_'+str(my_rank)+'/'
+		os.makedirs(rank_specific_directory,exist_ok = True)
+		if self.u is None:
+			self.u = self.observable.generate_vector(STATE)
+		if self.m is None:
+			self.m = self.observable.generate_vector(PARAMETER)
 
 		self.J = ObservableJacobian(self.observable)
 
@@ -555,8 +560,13 @@ class ActiveSubspaceProjector:
 		output_dimension,input_dimension = self.J.shape
 		rank = min(self.parameters['rank'],output_dimension,input_dimension)
 		# Initialize randomized Omega
+		if self.observable.problem.C is None:
+			m_mean = self.prior.mean
+			u_at_mean = self.observable.problem.generate_state()
+			self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+			self.observable.setLinearizationPoint([u_at_mean,m_mean,None])
 		input_vector = dl.Vector(self.mesh_constructor_comm)
-		self.Js[0].init_vector(input_vector,1)
+		self.J.init_vector(input_vector,1)
 		Omega = MultiVector(input_vector,rank + self.parameters['oversampling'])
 		# Omega does not need to be communicated across processes in this case
 		# like with the global reduction collectives
@@ -600,23 +610,23 @@ class ActiveSubspaceProjector:
 		if compress_files:
 			print('Compressing mq data'.center(80))
 			t_start_mq = time.time()
-			local_ms = np.zeros((self.parameters['jacobian_data_per_process'],m_shape))
-			local_qs = np.zeros((self.parameters['jacobian_data_per_process'],q_shape))
+			local_ms = np.zeros((self.parameters['jacobian_data_per_process'],input_dimension))
+			local_qs = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension))
 			for i in range(0,self.parameters['jacobian_data_per_process']):
 				local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 				local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-			np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+			np.savez_compressed(self.parameters['output_directory']+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 			print(('mq compression took '+str(time.time()-t_start_mq)+' s '))
 			t_start_J = time.time()
 			print('Compressing Jacobian data'.center(80))
-			locals_Us = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension,rank))
-			local_simas = np.zeros((self.parameters['jacobian_data_per_process'],rank))
+			local_Us = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension,rank))
+			local_sigmas = np.zeros((self.parameters['jacobian_data_per_process'],rank))
 			local_Vs = np.zeros((self.parameters['jacobian_data_per_process'],input_dimension,rank))
 			for i in range(0,self.parameters['jacobian_data_per_process']):
 				local_Us[i] = np.load(jacobian_rank_specific_directory+'U_sample_'+str(i)+'.npy')
 				local_sigmas[i] = np.load(jacobian_rank_specific_directory+'sigma_sample_'+str(i)+'.npy')
 				local_Vs[i] = np.load(jacobian_rank_specific_directory+'V_sample_'+str(i)+'.npy')
-			np.savez_compressed(output_directory+'J_on_rank'+str(my_rank)+'.npz',\
+			np.savez_compressed(self.parameters['output_directory']+'J_on_rank'+str(my_rank)+'.npz',\
 						U_data = local_Us,sigma_data = local_sigmas,V_data = local_Vs)
 			print(('Jacobian compression took '+str(time.time()-t_start_J)+' s '))
 
