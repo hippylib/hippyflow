@@ -72,6 +72,14 @@ class hippylibModelWrapper:
 		Bu.axpy(-1.,self.model.misfit.d)
 		return (1./self.model.misfit.noise_variance)*Bu
 
+	def evalMisfitCost(self,m,u0 = None,setLinearizationPoint = False):
+		"""
+		"""
+		assert hasattr(self.model.misfit,'d')
+		Bu = self.observable.eval(m,u0=u0,setLinearizationPoint=setLinearizationPoint)
+		Bu.axpy(-1.,self.model.misfit.d)
+		return (0.5/self.model.misfit.noise_variance)*Bu.inner(Bu)
+
 	def setLinearizationPoint(self, x):
 		"""
 		Specify the point :code:`x = [u,m,p]` at which the Hessian operator (or the Gauss-Newton approximation)
