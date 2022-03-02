@@ -145,6 +145,17 @@ class hippylibModelWrapper:
 		else:
 			self.invertMassMatrix(mhat,mg)
 
+	def evalRegularizationGradient(self,x):
+		"""
+		"""
+		mgReg = self.model.generate_vector(hl.PARAMETER)
+		self.model.prior.grad(x[hl.PARAMETER],mgReg)
+		return mgReg
+
+
+
+
+
 	def invertMassMatrix(self,out,rhs):
 		"""
 		"""
