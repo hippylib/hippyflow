@@ -52,6 +52,8 @@ class hippylibModelWrapper:
 		self.observable = hippylibModelLinearStateObservable(model)
 
 		self.J = ObservableJacobian(self.observable)
+		self.Jhelp = None
+		self.Jthelp = None
 
 		self.u_sol = None
 
@@ -164,6 +166,51 @@ class hippylibModelWrapper:
 		"""
 		"""
 		self.model.prior.Rsolver.solve(out,rhs)
+
+	def evalJ(self,mhat,x = None,linearizationPointSet = False):
+		"""
+		
+		"""
+		if self.Jhelp is None:
+			self.Jhelp = dl.Vector()
+			self.J.init_vector(self.Jhelp, dim = 0)
+
+		if not linearizationPointSet:
+			assert x is not None
+			u,m,_ = x
+			assert m is not None
+			if u is None:
+				u = self.model.generate_vector(hl.STATE)
+				self.model.solveFwd(u,[u,m,None])
+			x = [u,m,None]
+			self.observable.setLinearizationPoint(x)
+		self.Jhelp.zero()
+		self.J.mult(mhat,self.Jhelp)
+		return self.Jhelp
+
+
+	def evalJt(self,qhat,x = None,linearizationPointSet = False):
+		"""
+		
+		"""
+		if self.Jthelp is None:
+			self.Jthelp = dl.Vector()
+			self.J.init_vector(self.Jhelp, dim = 1)
+
+		if not linearizationPointSet:
+			assert x is not None
+			u,m,_ = x
+			assert m is not None
+			if u is None:
+				u = self.model.generate_vector(hl.STATE)
+				self.model.solveFwd(u,[u,m,None])
+			x = [u,m,None]
+			self.observable.setLinearizationPoint(x)
+		self.Jthelp.zero()
+		self.J.transpmult(qhat,self.Jthelp)
+		return self.Jthelp
+
+
 
 
 	def evalLowRankJacobian(self,x,rank,u0 = None, linearizationPointSet = False,\
