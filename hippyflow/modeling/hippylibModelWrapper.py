@@ -57,6 +57,10 @@ class hippylibModelWrapper:
 
 		self.u_sol = None
 
+		# Prior help
+		self.noise_help = None
+		self.sample_help = None
+
 
 
 
@@ -195,7 +199,7 @@ class hippylibModelWrapper:
 		"""
 		if self.Jthelp is None:
 			self.Jthelp = dl.Vector()
-			self.J.init_vector(self.Jhelp, dim = 1)
+			self.J.init_vector(self.Jthelp, dim = 1)
 
 		if not linearizationPointSet:
 			assert x is not None
@@ -239,6 +243,19 @@ class hippylibModelWrapper:
 
 		return U,sigma,V
 
+	def samplePrior(self):
+		if self.noise_help is None:
+			self.noise_help = dl.Vector()
+			self.model.prior.init_vector(self.noise_help,"noise")
+			
+		if self.sample_help is None:
+			self.sample_help = dl.Vector()
+			self.model.prior.init_vector(self.sample_help,0)
+
+		hl.parRandom.normal(1.,self.noise_help)
+		self.model.prior.sample(self.noise_help,self.sample_help)
+
+		return self.sample_help
 
 
 
