@@ -25,12 +25,16 @@ from .observable import hippylibModelLinearStateObservable
 from .jacobian import ObservableJacobian
 from ..utilities.mv_utilities import mv_to_dense, dense_to_mv_local
 
-def hippylibModelWrapperParameterList():
+def hippylibModelWrapperSettings():
 	"""
 	This function implements a parameter list for the hippylibModelWrapper
 	"""
 
 	parameters = {}
+	parameters['seed'] =  [0, 'Different than seed in hippylib.utils.Random parRandom'] 
+
+	# Inverse problem related parameters
+	parameters['rel_noise'] = [None, 'Relative noise for inverse problem']
 	return hl.ParameterList(parameters)
 
 
@@ -41,7 +45,7 @@ class hippylibModelWrapper:
 	hIPPYlib.modeling.model.Model attributes
 
 	"""
-	def __init__(self,model,settings = hippylibModelWrapperParameterList()):
+	def __init__(self,model,settings = hippylibModelWrapperSettings()):
 		"""
 		"""
 		warnings.warn('Experimental Class! Be Wary')
@@ -55,12 +59,21 @@ class hippylibModelWrapper:
 		self.Jhelp = None
 		self.Jthelp = None
 
+		# Additional storage to save state if needed
 		self.u_sol = None
 
 		# Prior help
 		self.noise_help = None
 		self.sample_help = None
 
+		# Set up random sampler here to be different than parRandom used in hippylib
+		_world_rank = dl.MPI.rank(dl.MPI.comm_world)
+		_world_size = dl.MPI.size(dl.MPI.comm_world)
+
+		self.parRandom = hl.Random(_world_rank, _world_size,seed = self.settings['seed'])
+
+		# Inverse problem help
+		self.mtrue = None
 
 
 
@@ -252,10 +265,37 @@ class hippylibModelWrapper:
 			self.sample_help = dl.Vector()
 			self.model.prior.init_vector(self.sample_help,0)
 
-		hl.parRandom.normal(1.,self.noise_help)
+		self.noise_help.zero()
+		self.sample_help.zero()
+
+		self.parRandom.normal(1.,self.noise_help)
 		self.model.prior.sample(self.noise_help,self.sample_help)
 
 		return self.sample_help
+
+	def setUpInverseProblem(self):
+		"""
+		"""
+		assert self.settings['rel_noise'] is not None
+
+		if self.mtrue is None:
+			self.mtrue = dl.Vector()
+			self.model.prior.init_vector(self.mtrue,0)
+		self.mtrue.zero()
+		# self.mtrue.axpy(1.0,self.samplePrior())
+		self.mtrue.set_local(self.samplePrior().get_local())
+
+		self.model.misfit.d.zero()
+
+		utrue = self.model.problem.generate_state()
+		x = [utrue, self.mtrue, None]
+		self.model.problem.solveFwd(x[hl.STATE], x)
+		self.model.misfit.B.mult(x[hl.STATE], self.model.misfit.d)
+		MAX = self.model.misfit.d.norm("linf")
+		rel_noise = self.settings['rel_noise']
+		noise_std_dev = rel_noise * MAX
+		self.parRandom.normal_perturb(noise_std_dev, self.model.misfit.d)
+		self.model.misfit.noise_variance = noise_std_dev*noise_std_dev
 
 
 

@@ -17,7 +17,7 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
-from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperParameterList
+from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperSettings
 
 from .jacobian import Jacobian, ObservableJacobian, JJT, JTJ
 
