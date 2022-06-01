@@ -19,7 +19,7 @@ from mpi4py import MPI
 import time
 import warnings
 
-import hippylib as hl
+import hippylib as hp
 
 from .observable import hippylibModelLinearStateObservable
 from .jacobian import ObservableJacobian
@@ -35,7 +35,7 @@ def hippylibModelWrapperSettings():
 
 	# Inverse problem related parameters
 	parameters['rel_noise'] = [None, 'Relative noise for inverse problem']
-	return hl.ParameterList(parameters)
+	return hp.ParameterList(parameters)
 
 
 
@@ -56,6 +56,7 @@ class hippylibModelWrapper:
 		self.observable = hippylibModelLinearStateObservable(model)
 
 		self.J = ObservableJacobian(self.observable)
+		self.dQ,self.dM = self.J.shape
 		self.Jhelp = None
 		self.Jthelp = None
 
@@ -70,7 +71,7 @@ class hippylibModelWrapper:
 		_world_rank = dl.MPI.rank(dl.MPI.comm_world)
 		_world_size = dl.MPI.size(dl.MPI.comm_world)
 
-		self.parRandom = hl.Random(_world_rank, _world_size,seed = self.settings['seed'])
+		self.parRandom = hp.Random(_world_rank, _world_size,seed = self.settings['seed'])
 
 		# Inverse problem help
 		self.mtrue = None
@@ -111,7 +112,7 @@ class hippylibModelWrapper:
 			- simply store a copy of x and evaluate action of blocks of the Hessian on the fly
 			- or partially precompute the block of the hessian (if feasible)
 		"""
-		x[hl.ADJOINT] = self.model.generate_vector(hl.ADJOINT)
+		x[hp.ADJOINT] = self.model.generate_vector(hp.ADJOINT)
 		self.problem.setLinearizationPoint(x, True)
 
 
@@ -127,28 +128,28 @@ class hippylibModelWrapper:
 
 		if u is None:
 			if u0 is None:
-				u0 = self.model.generate_vector(hl.STATE)
+				u0 = self.model.generate_vector(hp.STATE)
 			self.model.solveFwd(u0,[u0,m,None])
 			u = u0
 			if p is None:
-				p = self.model.generate_vector(hl.ADJOINT)
+				p = self.model.generate_vector(hp.ADJOINT)
 			self.model.solveAdj(p,[u,m,p])
 
 		elif p is None:
-			p = self.model.generate_vector(hl.ADJOINT)
+			p = self.model.generate_vector(hp.ADJOINT)
 			self.model.solveAdj(p,[u,m,p])
 
 		if setLinearizationPoint:
 			self.setLinearizationPoint([u,m,None],True)
 		x = [u,m,p]
-		mg = self.model.generate_vector(hl.PARAMETER)
+		mg = self.model.generate_vector(hp.PARAMETER)
 
-		tmp = self.model.generate_vector(hl.PARAMETER)
+		tmp = self.model.generate_vector(hp.PARAMETER)
 		self.model.problem.evalGradientParameter(x, mg)
-		self.model.misfit.grad(hl.PARAMETER,x,tmp)
+		self.model.misfit.grad(hp.PARAMETER,x,tmp)
 		mg.axpy(1., tmp)
 		if not misfit_only:
-			self.model.prior.grad(x[hl.PARAMETER], tmp)
+			self.model.prior.grad(x[hp.PARAMETER], tmp)
 			mg.axpy(1., tmp)
 
 		return mg
@@ -160,7 +161,7 @@ class hippylibModelWrapper:
 		"""
 
 		mg = self.evalVariationalGradient(x,u0=u0,setLinearizationPoint=setLinearizationPoint,misfit_only=misfit_only)
-		mhat = self.model.generate_vector(hl.PARAMETER)
+		mhat = self.model.generate_vector(hp.PARAMETER)
 		if invert_regularization:
 			self.invertRegularization(mhat,mg)
 		else:
@@ -169,8 +170,8 @@ class hippylibModelWrapper:
 	def evalRegularizationGradient(self,x):
 		"""
 		"""
-		mgReg = self.model.generate_vector(hl.PARAMETER)
-		self.model.prior.grad(x[hl.PARAMETER],mgReg)
+		mgReg = self.model.generate_vector(hp.PARAMETER)
+		self.model.prior.grad(x[hp.PARAMETER],mgReg)
 		return mgReg
 
 
@@ -197,7 +198,7 @@ class hippylibModelWrapper:
 			u,m,_ = x
 			assert m is not None
 			if u is None:
-				u = self.model.generate_vector(hl.STATE)
+				u = self.model.generate_vector(hp.STATE)
 				self.model.solveFwd(u,[u,m,None])
 			x = [u,m,None]
 			self.observable.setLinearizationPoint(x)
@@ -219,7 +220,7 @@ class hippylibModelWrapper:
 			u,m,_ = x
 			assert m is not None
 			if u is None:
-				u = self.model.generate_vector(hl.STATE)
+				u = self.model.generate_vector(hp.STATE)
 				self.model.solveFwd(u,[u,m,None])
 			x = [u,m,None]
 			self.observable.setLinearizationPoint(x)
@@ -239,22 +240,54 @@ class hippylibModelWrapper:
 		assert type(rank) is int
 		if linearizationPointSet:
 			# Assumes that solution at this point is passed in
-			assert x[hl.STATE] is not None
+			assert x[hp.STATE] is not None
 		else:
 			if u is None:
 				if u0 is None:
-					u0 = self.model.generate_vector(hl.STATE)
+					u0 = self.model.generate_vector(hp.STATE)
 				self.model.solveFwd(u0,[u0,m,None])
 				u = u0
 			x = [u,m,None]
 			self.observable.setLinearizationPoint(x)
-		m_constructor = self.model.generate_vector(hl.PARAMETER)
+		m_constructor = self.model.generate_vector(hp.PARAMETER)
 		# Sample random matrix
-		Omega = hl.MultiVector(m_constructor, rank + over_sample)
-		hl.parRandom.normal(1.,Omega)
-		U,sigma,V = hl.accuracyEnhancedSVD(self.J,Omega,rank,s=power_iteration)
+		Omega = hp.MultiVector(m_constructor, rank + over_sample)
+		hp.parRandom.normal(1.,Omega)
+		U,sigma,V = hp.accuracyEnhancedSVD(self.J,Omega,rank,s=power_iteration)
 
-		return U,sigma,V
+		return mv_to_dense(U),sigma,mv_to_dense(V)
+
+	def evalJacobian(self,x,u0 = None,linearizationPointSet=False):
+		"""
+		"""
+		u,m,_ = x
+		assert m is not None
+		if linearizationPointSet:
+			# Assumes that solution at this point is passed in
+			assert x[hp.STATE] is not None
+		else:
+			if u is None:
+				if u0 is None:
+					u0 = self.model.generate_vector(hp.STATE)
+				self.model.solveFwd(u0,[u0,m,None])
+				u = u0
+			x = [u,m,None]
+			self.observable.setLinearizationPoint(x)
+
+		m_constructor = self.model.generate_vector(hp.PARAMETER)
+		JT_out = hp.MultiVector(m_constructor,self.dQ)
+
+		q_vec = dl.Vector()
+
+		self.J.init_vector(q_vec,0)
+
+		I_MV = dense_to_mv_local(np.eye(self.dQ),q_vec)
+
+		hp.MatMvTranspmult(self.J,I_MV,JT_out)
+
+		return mv_to_dense(JT_out).T
+
+
 
 	def samplePrior(self):
 		if self.noise_help is None:
@@ -289,8 +322,8 @@ class hippylibModelWrapper:
 
 		utrue = self.model.problem.generate_state()
 		x = [utrue, self.mtrue, None]
-		self.model.problem.solveFwd(x[hl.STATE], x)
-		self.model.misfit.B.mult(x[hl.STATE], self.model.misfit.d)
+		self.model.problem.solveFwd(x[hp.STATE], x)
+		self.model.misfit.B.mult(x[hp.STATE], self.model.misfit.d)
 		MAX = self.model.misfit.d.norm("linf")
 		rel_noise = self.settings['rel_noise']
 		noise_std_dev = rel_noise * MAX
