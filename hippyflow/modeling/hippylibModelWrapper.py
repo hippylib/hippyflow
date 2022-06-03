@@ -228,6 +228,35 @@ class hippylibModelWrapper:
 		self.J.transpmult(qhat,self.Jthelp)
 		return self.Jthelp
 
+	def evalGNHessian(self,mhat,x = None,linearizationPointSet = False):
+		"""
+		
+		"""
+		if self.Jhelp is None:
+			self.Jhelp = dl.Vector()
+			self.J.init_vector(self.Jhelp, dim = 0)
+		if self.Jthelp is None:
+			self.Jthelp = dl.Vector()
+			self.J.init_vector(self.Jthelp, dim = 1)
+
+		if not linearizationPointSet:
+			assert x is not None
+			u,m,_ = x
+			assert m is not None
+			if u is None:
+				u = self.model.generate_vector(hp.STATE)
+				self.model.solveFwd(u,[u,m,None])
+			x = [u,m,None]
+			self.observable.setLinearizationPoint(x)
+		self.Jhelp.zero()
+		self.Jthelp.zero()
+		self.J.mult(mhat,self.Jhelp)
+		self.J.transpmult(self.Jhelp,self.Jthelp)
+
+		self.Jthelp *= 1./self.model.misfit.noise_variance
+
+		return self.Jthelp
+
 
 
 
