@@ -17,15 +17,21 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
+from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperSettings
+
 from .jacobian import Jacobian, ObservableJacobian, JJT, JTJ
 
 from .KLEProjector import KLEProjector, KLEParameterList
+
+from .lowRankRectangularOperator import LowRankRectangularOperator
 
 from .maternPrior import BiLaplacian2D, Laplacian2D
 
 from .multiPDEProblem import MultiPDEProblem
 
 from .observable import LinearStateObservable, DomainRestrictedOperator, hippylibModelLinearStateObservable
+
+from .operatorWrappers import npToDolfinOperator
 
 from .PODProjector import PODProjector, PODParameterList
 
