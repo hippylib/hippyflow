@@ -99,9 +99,7 @@ class TestDerivativeSubspace(unittest.TestCase):
 		AS.construct_input_subspace()
 		d_serialized_in = AS.d_GN
 		input_d_error = np.linalg.norm(d_batch_in - d_serialized_in)
-		# assert input_d_error < 1e-12
-		# Is this too aggressive?
-		assert input_d_error == 0.0
+		assert input_d_error < 1e-12
 
 		AS_parameters['serialized_sampling'] = False
 		AS.construct_input_subspace()
@@ -111,8 +109,8 @@ class TestDerivativeSubspace(unittest.TestCase):
 		AS.construct_input_subspace()
 		d_serialized_out = AS.d_NG
 		output_d_error = np.linalg.norm(d_batch_in - d_serialized_in)
-		# Is this too aggressive?
-		assert output_d_error == 0.0
+		
+		assert output_d_error < 1e-12
 
 
 if __name__ == '__main__':

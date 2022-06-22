@@ -123,7 +123,7 @@ class ObservableJacobian:
         self.observable.solveFwdIncremental(self.uhat, self.rhs_fwd)
         assert hasattr(self.observable,'applyB'), 'LinearObservable must have attribute applyB'
         self.observable.applyB(self.uhat,y)
-
+        y *= -1.0
         self.ncalls += 1
 
     def transpmult(self,x,y):
@@ -135,6 +135,7 @@ class ObservableJacobian:
         self.observable.applyBt(x,self.rhs_adj)
         self.observable.solveAdjIncremental(self.phat, self.rhs_adj)
         self.observable.applyCt(self.phat, y)
+        y *= -1.0
         self.ncalls += 1
 
 
