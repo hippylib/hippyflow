@@ -25,12 +25,12 @@ class StateSpaceIdentityOperator:
         y.zero()
         y.axpy(1.0, u)
 
-    def transpmult(self, x, p):
-        p.zero()
-        p.axpy(1.0, x)
-
-    def adjmult(self, x, p):
-        self.M.transpmult(x, p)
+    def transpmult(self, x, p, use_mass_matrix=True):
+        if use_mass_matrix:
+            self.M.transpmult(x, p)
+        else:
+            p.zero()
+            p.axpy(1.0, x)
 
 class StateSpaceObservable(LinearStateObservable):
     """
@@ -40,13 +40,10 @@ class StateSpaceObservable(LinearStateObservable):
 		"""
 		Create a model given:
 			- problem: the description of the forward/adjoint problem and all the sensitivities
-			- B: the state space observation operator with method `transpmult` and `adjmult` 
+			- B: the state space observation operator with method `transpmult` 
 			- prior: the prior 
 		"""
         super().__init__(problem, B)
     
-    def applyBt(self, x, out, operation="adjoint"):
-        if operation == "adjoint":
-            self.B.adjmult(x, out)
-        else:
-            self.B.transpmult(x, out)
+    def applyBt(self, x, out, use_mass_matrix=True):
+            self.B.transpmult(x, out, use_mass_matrix)
