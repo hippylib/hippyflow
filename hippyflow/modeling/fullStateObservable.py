@@ -18,25 +18,25 @@ import numpy as np
 from .observable import LinearStateObservable
 
 class StateSpaceIdentityOperator:
-	"""
-	This class defines an identity operator on the state space
-	"""
-	def __init__(self, M):
-		"""
-		Constructor:
-			:code: `M`: mass matrix of the state function space 
-		"""
-		self.M = M
-	
-	def mpi_comm(self):
-		return self.M.mpi_comm()
+    """
+    This class defines an identity operator on the state space
+    """
+    def __init__(self, M):
+        """
+        Constructor:
+            :code: `M`: mass matrix of the state function space 
+        """
+        self.M = M
 
-	def init_vector(self, v, dim):
-		return self.M.init_vector(v, dim)
+    def mpi_comm(self):
+        return self.M.mpi_comm()
 
-	def mult(self, u, y):
-		y.zero()
-		y.axpy(1.0, u)
+    def init_vector(self, v, dim):
+        return self.M.init_vector(v, dim)
+
+    def mult(self, u, y):
+        y.zero()
+        y.axpy(1.0, u)
 
     def transpmult(self, x, p, use_mass_matrix=True):
         if use_mass_matrix:
@@ -46,7 +46,7 @@ class StateSpaceIdentityOperator:
             p.axpy(1.0, x)
 
 class StateSpaceObservable(LinearStateObservable):
-	"""
+    """
 
     """
     def __init__(self, problem, B):
@@ -58,6 +58,6 @@ class StateSpaceObservable(LinearStateObservable):
             - prior: the prior 
         """
         super().__init__(problem, B)
-    
+
     def applyBt(self, x, out, use_mass_matrix=True):
             self.B.transpmult(x, out, use_mass_matrix)
