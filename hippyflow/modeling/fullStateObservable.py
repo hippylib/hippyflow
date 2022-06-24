@@ -20,6 +20,10 @@ from .observable import LinearStateObservable
 class StateSpaceIdentityOperator:
 	"""
 	This class defines an identity operator on the state space
+
+	In the case that the mass matrix is used, the transpose operation implements the adjoint
+	for the inner product induced by the mass matrix. 
+	Otherwise this class just implements a simple identity operation for the state variable. 
 	"""
 	def __init__(self, M, use_mass_matrix = True):
 		"""
