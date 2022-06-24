@@ -18,32 +18,34 @@ import numpy as np
 from .observable import LinearStateObservable
 
 class StateSpaceIdentityOperator:
-    """
-    This class defines an identity operator on the state space
-    """
-    def __init__(self, M, use_mass_matrix = True):
-        """
-        Constructor:
-            :code: `M`: mass matrix of the state function space 
-            :code: `use_mass_matrix`: boolean of whether mass matrix is used in the transpose or not. 
-        """
-        self.M = M
-        self.use_mass_matrix = use_mass_matrix
+	"""
+	This class defines an identity operator on the state space
+	"""
+	def __init__(self, M, use_mass_matrix = True):
+		"""
+		Constructor:
+			:code: `M`: mass matrix of the state function space 
+			:code: `use_mass_matrix`: boolean of whether mass matrix is used in the transpose or not. 
+		"""
+		self.M = M
+		self.use_mass_matrix = use_mass_matrix
 
-    def mpi_comm(self):
-        return self.M.mpi_comm()
+	def mpi_comm(self):
+		return self.M.mpi_comm()
 
-    def init_vector(self, v, dim):
-        return self.M.init_vector(v, dim)
+	def init_vector(self, v, dim):
+		return self.M.init_vector(v, dim)
 
-    def mult(self, u, y):
-        y.zero()
-        y.axpy(1.0, u)
+	def mult(self, u, y):
+		y.zero()
+		y.axpy(1.0, u)
 
-    def transpmult(self, x, p):
-        if self.use_mass_matrix:
-            self.M.transpmult(x, p)
-        else:
-            p.zero()
-            p.axpy(1.0, x)
+	def transpmult(self, x, p):
+		"""
+		"""
+		if self.use_mass_matrix:
+			self.M.transpmult(x, p)
+		else:
+			p.zero()
+			p.axpy(1.0, x)
 

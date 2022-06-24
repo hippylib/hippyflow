@@ -27,7 +27,7 @@ import hippyflow as hf
 def u_boundary(x, on_boundary):
 	return on_boundary and ( x[1] < dl.DOLFIN_EPS or x[1] > 1.0 - dl.DOLFIN_EPS)
 
-class TestDerivativeSubspace(unittest.TestCase):
+class TestFullStateDerivativeSubspace(unittest.TestCase):
 	def setUp(self):
 		dl.parameters["ghost_mode"] = "shared_facet"
 		ndim = 2
@@ -60,16 +60,13 @@ class TestDerivativeSubspace(unittest.TestCase):
 
 		self.pde = hp.PDEVariationalProblem(self.Vh, pde_varf, bc, bc0, is_fwd_linear=True)
 
+		u_trial = dl.TrialFunction(self.Vh[hp.STATE])
+		u_test = dl.TestFunction(self.Vh[hp.STATE])
 
-		x_targets = np.linspace(0.1,0.9,10)
-		y_targets = np.linspace(0.1,0.9,10)
-		targets = []
-		for xi in x_targets:
-			for yi in y_targets:
-				targets.append((xi,yi))
-		targets = np.array(targets)
+		M = dl.PETScMatrix()
+		dl.assemble(u_trial*u_test*dl.dx, tensor=M)
 
-		B = hp.assemblePointwiseObservation(self.Vh[hp.STATE], targets)
+		B = hf.StateSpaceIdentityOperator(M)
 		return hf.LinearStateObservable(self.pde,B)
 
 
