@@ -18,25 +18,25 @@ import numpy as np
 from .observable import LinearStateObservable
 
 class StateSpaceIdentityOperator:
-    """
-    This class defines an identity operator on the state space
-    """
-    def __init__(self, M):
-        """
-        Constructor:
-            :code: `M`: mass matrix of the state function space 
-        """
-        self.M = M
-    
-    def mpi_comm(self):
-        return self.M.mpi_comm()
+	"""
+	This class defines an identity operator on the state space
+	"""
+	def __init__(self, M):
+		"""
+		Constructor:
+			:code: `M`: mass matrix of the state function space 
+		"""
+		self.M = M
+	
+	def mpi_comm(self):
+		return self.M.mpi_comm()
 
-    def init_vector(self, v, dim):
-        return self.M.init_vector(v, dim)
+	def init_vector(self, v, dim):
+		return self.M.init_vector(v, dim)
 
-    def mult(self, u, y):
-        y.zero()
-        y.axpy(1.0, u)
+	def mult(self, u, y):
+		y.zero()
+		y.axpy(1.0, u)
 
     def transpmult(self, x, p, use_mass_matrix=True):
         if use_mass_matrix:
@@ -46,14 +46,15 @@ class StateSpaceIdentityOperator:
             p.axpy(1.0, x)
 
 class StateSpaceObservable(LinearStateObservable):
-    """
+	"""
 
     """
     def __init__(self, problem, B):
         """
         Create a model given:
             - problem: the description of the forward/adjoint problem and all the sensitivities
-            - B: the state space observation operator with method `transpmult` 
+            - B: the state space observation operator with method `transpmult` with the option
+                to use mass matrix as in adjoint operator
             - prior: the prior 
         """
         super().__init__(problem, B)
