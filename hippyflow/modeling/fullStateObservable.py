@@ -21,12 +21,14 @@ class StateSpaceIdentityOperator:
     """
     This class defines an identity operator on the state space
     """
-    def __init__(self, M):
+    def __init__(self, M, use_mass_matrix = True):
         """
         Constructor:
             :code: `M`: mass matrix of the state function space 
+            :code: `use_mass_matrix`: boolean of whether mass matrix is used in the transpose or not. 
         """
         self.M = M
+        self.use_mass_matrix = use_mass_matrix
 
     def mpi_comm(self):
         return self.M.mpi_comm()
@@ -38,26 +40,10 @@ class StateSpaceIdentityOperator:
         y.zero()
         y.axpy(1.0, u)
 
-    def transpmult(self, x, p, use_mass_matrix=True):
-        if use_mass_matrix:
+    def transpmult(self, x, p):
+        if self.use_mass_matrix:
             self.M.transpmult(x, p)
         else:
             p.zero()
             p.axpy(1.0, x)
 
-class StateSpaceObservable(LinearStateObservable):
-    """
-
-    """
-    def __init__(self, problem, B):
-        """
-        Create a model given:
-            - problem: the description of the forward/adjoint problem and all the sensitivities
-            - B: the state space observation operator with method `transpmult` with the option
-                to use mass matrix as in adjoint operator
-            - prior: the prior 
-        """
-        super().__init__(problem, B)
-
-    def applyBt(self, x, out, use_mass_matrix=True):
-            self.B.transpmult(x, out, use_mass_matrix)
