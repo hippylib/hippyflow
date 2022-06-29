@@ -11,7 +11,6 @@
 # terms of the GNU General Public License (as published by the Free
 # Software Foundation) version 2.0 dated June 1991.
 
-
 import dolfin as dl
 import numpy as np
 import os
