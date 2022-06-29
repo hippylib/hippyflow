@@ -15,8 +15,6 @@ import hippylib as hp
 import dolfin as dl 
 import numpy as np 
 
-from .observable import LinearStateObservable
-
 class StateSpaceIdentityOperator:
 	"""
 	This class defines an identity operator on the state space

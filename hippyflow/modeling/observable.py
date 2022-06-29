@@ -15,6 +15,8 @@ from hippylib import *
 import dolfin as dl
 import numpy as np
 
+CONTROL = 3
+
 
 class Observable:
 	"""
@@ -102,15 +104,26 @@ class LinearStateObservable:
 		If :code:`component = ADJOINT` return only :code:`p`
 		""" 
 		if component == "ALL":
-			x = [self.problem.generate_state(),
-				 self.problem.generate_parameter(),
-				 self.problem.generate_state()]
+			if hasattr(self.problem,'Cz'):
+				# Assumes that problem is a control problem
+				x = [self.problem.generate_state(),
+					 self.problem.generate_parameter(),
+					 self.problem.generate_state(),
+					 self.problem.generate_control()]
+			else:
+				x = [self.problem.generate_state(),
+					 self.problem.generate_parameter(),
+					 self.problem.generate_state()]
 		elif component == STATE:
 			x = self.problem.generate_state()
 		elif component == PARAMETER:
 			x = self.problem.generate_parameter()
 		elif component == ADJOINT:
 			x = self.problem.generate_state()
+		elif component == 3:
+			assert hasattr(self.problem,'Cz'), 'Assuming it is control problem'
+			# 3 denotes a control variable needs to be generated
+			x = self.problem.generate_control()
 
 		return x
 
@@ -130,6 +143,8 @@ class LinearStateObservable:
 		elif dim == 1:
 			# self.model.init_parameter(x)
 			self.problem.C.init_vector(x,1)
+		elif dim == 3:
+			self.problem.Cz.init_vector(x,1)
 		else: 
 			raise
 
@@ -261,6 +276,32 @@ class LinearStateObservable:
 		..note:: This routine assumes that :code:`out` has the correct shape.
 		"""
 		self.problem.apply_ij(PARAMETER,ADJOINT, dp, out)
+
+	def applyCz(self, dz, out):
+		"""
+
+		Apply the :math:`C` block of the (control problem) Hessian to a (incremental) control variable, i.e.
+		:code:`out` = :math:`C_z dz`
+		
+		Parameters:
+			- :code:`dz` the (incremental) control variable
+			- :code:`out` the action of the :math:`C_z` block on :code:`dz`
+			
+		.. note:: This routine assumes that :code:`out` has the correct shape.
+		"""
+		self.problem.apply_ij(ADJOINT,CONTROL, dz, out)
+	
+	def applyCzt(self, dp, out):
+		"""
+		Apply the transpose of the :math:`C_z` block of the (control) Hessian to a (incremental) adjoint variable.
+		:code:`out` = :math:`C_z^t dp`
+		Parameters:
+			- :code:`dp` the (incremental) adjoint variable
+			- :code:`out` the action of the :math:`C_z^T` block on :code:`dp`
+			
+		..note:: This routine assumes that :code:`out` has the correct shape.
+		"""
+		self.problem.apply_ij(CONTROL,ADJOINT, dp, out)
 
 def hippylibModelLinearStateObservable(model):
 	"""
