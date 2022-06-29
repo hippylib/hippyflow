@@ -18,7 +18,6 @@ from hippylib import *
 from mpi4py import MPI 
 import time
 
-
 from ..collectives.collectiveOperator import CollectiveOperator, MatrixMultCollectiveOperator
 from ..collectives.collective import NullCollective
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
