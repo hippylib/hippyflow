@@ -90,10 +90,12 @@ class PODProjector:
 		"""
 		Solve the PDE at the mean
 		"""
-		m_mean = self.prior.mean
-		self.u_at_mean = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
-
+		try:
+			m_mean = self.prior.mean
+			self.u_at_mean = self.observable.problem.generate_state()
+			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
+		except:
+			self.u_at_mean = None
 
 	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True,\
 																			compress_files = True):
@@ -134,20 +136,24 @@ class PODProjector:
 			t0 = time.time()
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
 				print('Generating data number '+str(i))
-				parRandom.normal(1,self.noise)
-				self.prior.sample(self.noise,self.m)
-				self.u.zero()
-				self.u.axpy(1.,self.u_at_mean)
-				try:
-					this_q = self.observable.eval(self.m).get_local()
-					this_m = self.m.get_local()
-					np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
-					np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
-					# If there is an issue with the solve move on
-				except:
-					print('Issue with the nonlinear solve, moving on')
-					pass
-				
+				converged = False
+				while not converged:
+					parRandom.normal(1,self.noise)
+					self.prior.sample(self.noise,self.m)
+					self.u.zero()
+					if self.u_at_mean is not None:
+						self.u.axpy(1.,self.u_at_mean)
+					try:
+						this_q = self.observable.eval(self.m).get_local()
+						this_m = self.m.get_local()
+						np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
+						np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
+						converged = True
+						# If there is an issue with the solve move on
+					except:
+						print('Issue with the nonlinear solve, moving on')
+						pass
+					
 				if self.parameters['verbose']:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
