@@ -27,6 +27,8 @@ from ..utilities.plotting import *
 
 from .priorPreconditionedProjector import PriorPreconditionedProjector
 
+CONTROL = 3
+
 def ActiveSubspaceParameterList():
 	"""
 	This function implements a parameter list for the ActiveSubspaceProjector
@@ -89,7 +91,8 @@ class SeriallySampledJacobianOperator:
 	'''
 	Alterantive to SummedListOperator when memory is an issue for active subspace
 	'''
-	def __init__(self,observable,noise,prior,operation = 'JTJ',nsamples = None,ms = None,communicator=None,average=True):
+	def __init__(self,observable,noise,prior,control_distribution = None,operation = 'JTJ',\
+							nsamples = None,ms = None,zs = None,communicator=None,average=True):
 		'''
 		'''
 		assert operation in ['JTJ','JJT']
@@ -97,10 +100,16 @@ class SeriallySampledJacobianOperator:
 		self.observable = observable
 		self.noise = noise
 		self.prior = prior
+		self.control_distribution = control_distribution
 		self.operation = operation
 		self.nsamples = nsamples
 		self.average = average
 		self.ms = ms
+		if type(self.ms) is list:
+			# This is a unit-test case
+			self.zs = len(self.ms)*[None]
+		else:
+			self.zs = zs
 		
 		if communicator is None:
 			self.temp = None
@@ -109,6 +118,10 @@ class SeriallySampledJacobianOperator:
 
 		self.u = self.observable.generate_vector(STATE)
 		self.m = self.observable.generate_vector(PARAMETER)
+		if self.control_distribution is None:
+			self.z = None
+		else:
+			self.z = self.observable.generate_vector(CONTROL)
 
 	def init_vector(self,x):
 		"""
@@ -151,8 +164,15 @@ class SeriallySampledJacobianOperator:
 						self.noise.zero()
 						parRandom.normal(1,self.noise)
 						self.prior.sample(self.noise,self.m)
+						if self.control_distribution is None:
+							linearization_x = [self.u,self.m,None]
+						else:
+							self.z.zero()
+							self.control_distribution.sample(z)
+							linearization_x = [self.u,self.m,None,self.z]
+
+
 						# Solve the PDE
-						linearization_x = [self.u,self.m,None]
 						print('Attempting to solve')
 						t0 = time.time()
 						self.observable.solveFwd(self.u,linearization_x)
@@ -180,10 +200,12 @@ class SeriallySampledJacobianOperator:
 		else:
 			# Each m should already not run into solver issues
 			nsamples = len(self.ms)
-			for m in self.ms:
+			for m,z in zip(self.ms,self.zs):
 				# Solve the PDE
 				print('Attempting to solve')
 				linearization_x = [self.u,m,None]
+				if z is not None:
+					linearization_x.append(z)
 				self.observable.solveFwd(self.u,linearization_x)
 				print('Solution succesful')
 				# set linearization point
@@ -209,7 +231,7 @@ class ActiveSubspaceProjector:
 	Output active subspace: :math:`J^*J = US^2U^*`
 	Input active subspace: :math:`JJ^* = VS^2V^*`
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = NullCollective(),\
+	def __init__(self,observable, prior, control_distribution = None, mesh_constructor_comm = None ,collective = NullCollective(),\
 								  parameters = ActiveSubspaceParameterList()):
 		"""
 		Constructor
@@ -225,6 +247,7 @@ class ActiveSubspaceProjector:
 			print('Active Subspace object being created'.center(80))
 		self.observable = observable
 		self.prior = prior
+		self.control_distribution = control_distribution
 
 
 		if mesh_constructor_comm is not None:
@@ -263,10 +286,13 @@ class ActiveSubspaceProjector:
 			self.u = None
 			self.m = None
 			self.J = None
+			self.z = None
+
 		else:		
 			self.us = None
 			self.ms = None
 			self.Js = None
+			self.zs = None
 
 		# Draw a new sample and set linearization point.
 		if self.parameters['initialize_samples']:
@@ -294,7 +320,11 @@ class ActiveSubspaceProjector:
 		t0 = time.time()
 		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
 		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
-		for u,m,observable in zip(self.us,self.ms,self.observables):
+		if self.control_distribution is not None:
+			self.zs = [self.observable.generate_vector(CONTROL) for i in range(self.parameters['samples_per_process'])]
+		else:
+			self.zs = self.parameters['samples_per_process']*[None]
+		for u,m,z,observable in zip(self.us,self.ms,self.zs,self.observables):
 			solved = False
 			while not solved:
 				try:
@@ -302,12 +332,17 @@ class ActiveSubspaceProjector:
 					parRandom.normal(1,self.noise)
 					# set linearization point
 					self.prior.sample(self.noise,m)
-					x = [u,m,None]
+					if self.control_distribution is not None:
+						self.control_distribution.sample(z)
+						x = [u,m,None,z]
+					else:
+						x = [u,m,None]
 					observable.solveFwd(u,x)
 					observable.setLinearizationPoint(x)
 					solved = True
 				except:
 					m.zero()
+					z.zero()
 					print('Issue with the solution, moving on')
 					pass
 		if self.parameters['verbose']:
@@ -317,6 +352,10 @@ class ActiveSubspaceProjector:
 				print(('Size of '+str(self.parameters['samples_per_process'])+' observable is '+str(asizeof.asizeof(self.observables)/1e6)+' MB').center(80))
 			except:
 				print('Install pympler and run again: pip install pympler'.center(80))
+		# This should be the same independent of whether their is a control variable
+		# dependence or not, since this Jacobian is just for the parameter.
+		# When adding mixed derivatives the Jacobian operator additionally needs
+		# to handle control adjoints.
 		self.Js = [ObservableJacobian(observable) for observable in self.observables]
 		total_init_time = time.time() - t0
 		for i in range(100):
@@ -409,22 +448,32 @@ class ActiveSubspaceProjector:
 		if self.parameters['ms_given']:
 			assert self.ms is not None
 			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
-																				ms = self.ms)
+																				ms = self.ms,zs = self.zs)
 		else:
-			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
+			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,\
+														 control_distribution = self.control_distribution,operation = operation,\
 																				nsamples = self.parameters['samples_per_process'])
 		# This averaging assumes every process has an equal number of samples
 		# Otherwise it will bias towards a process with the fewest samples
 		Average_Jacobian_Operator = MatrixMultCollectiveOperator(Local_Average_Jacobian_Operator, self.collective, mpi_op = 'avg')
-		# Instantiate Gaussian random matrix
+		
 		if self.observable.problem.C is None:
+			# If this is the case, then the KKT blocks have not been built yet
+			# we overcome this by solving somewhere and setting the linearization pt.
 			m_mean = self.prior.mean
 			u_at_mean = self.observable.problem.generate_state()
-			self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
-			self.observable.setLinearizationPoint([u_at_mean,m_mean,None])
+			if self.control_distribution is not None:
+				z_somehwere = observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_somehwere)
+				x_lin = [u_at_mean,m_mean,None,z_somehwere]
+			else:
+				x_lin = [u_at_mean,m_mean,None]
+			
+			self.observable.problem.solveFwd(u_at_mean,x_lin)
+			self.observable.setLinearizationPoint(x_lin)
 
+		# Instantiate Gaussian random matrix
 		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
-
 		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
 		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
 		Omega.zero()
@@ -551,18 +600,34 @@ class ActiveSubspaceProjector:
 			self.u = self.observable.generate_vector(STATE)
 		if self.m is None:
 			self.m = self.observable.generate_vector(PARAMETER)
+		if self.control_distribution is not None and self.z is None:
+			self.z = self.observable.generate_vector(CONTROL)
 
 		self.J = ObservableJacobian(self.observable)
 
 		last_datum_generated = 0
 		output_dimension,input_dimension = self.J.shape
+		if self.control_distribution is not None:
+			assert self.observable.problem.Vh[STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
+			control_dimension = self.z.get_local().shape[0]
 		rank = min(self.parameters['rank'],output_dimension,input_dimension)
-		# Initialize randomized Omega
+
 		if self.observable.problem.C is None:
+			# If this is the case, then the KKT blocks have not been built yet
+			# we overcome this by solving somewhere and setting the linearization pt.
 			m_mean = self.prior.mean
 			u_at_mean = self.observable.problem.generate_state()
-			self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
-			self.observable.setLinearizationPoint([u_at_mean,m_mean,None])
+			if self.control_distribution is not None:
+				z_somehwere = observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_somehwere)
+				x_lin = [u_at_mean,m_mean,None,z_somehwere]
+			else:
+				x_lin = [u_at_mean,m_mean,None]
+			
+			self.observable.problem.solveFwd(u_at_mean,x_lin)
+			self.observable.setLinearizationPoint(x_lin)
+		
+		# Initialize randomized Omega
 		input_vector = dl.Vector(self.mesh_constructor_comm)
 		self.J.init_vector(input_vector,1)
 		Omega = MultiVector(input_vector,rank + self.parameters['oversampling'])
@@ -583,14 +648,20 @@ class ActiveSubspaceProjector:
 			parRandom.normal(1,self.noise)
 			self.m.zero() # This is probably redundant
 			self.prior.sample(self.noise,self.m)
-			x = [self.u,self.m,None]
+			if self.control_distribution is not None:
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
 			self.observable.solveFwd(self.u,x)
 			self.observable.setLinearizationPoint(x)
 			this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
-
 			np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
 			np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
+			if self.control_distribution is not None:
+				this_z = self.z.get_local()
+				np.save(rank_specific_directory+'z_sample_'+str(i)+'.npy',this_z)
 
 			Omega.zero() # probably unecessary
 			parRandom.normal(1.,Omega)
@@ -603,17 +674,28 @@ class ActiveSubspaceProjector:
 			np.save(jacobian_rank_specific_directory+'V_sample_'+str(i)+'.npy',Vnp)
 
 			if self.parameters['verbose']:
-				print('One (m,q,J) generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+				if self.control_distribution is None:
+					print('One (m,q(m),J(m)) generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+				else:
+					print('One (m,z,q(m,z),J(m,z)) generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 
 		if compress_files:
 			print('Compressing mq data'.center(80))
 			t_start_mq = time.time()
 			local_ms = np.zeros((self.parameters['jacobian_data_per_process'],input_dimension))
 			local_qs = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension))
+			if self.control_distribution is not None:
+				local_zs = np.zeros((self.parameters['jacobian_data_per_process'],control_dimension))
 			for i in range(0,self.parameters['jacobian_data_per_process']):
 				local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 				local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-			np.savez_compressed(self.parameters['output_directory']+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+				if self.control_distribution is not None:
+					local_zs[i] = np.load(rank_specific_directory+'z_sample_'+str(i)+'.npy')
+			if self.control_distribution is None:
+				np.savez_compressed(self.parameters['output_directory']+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+			else:
+				np.savez_compressed(self.parameters['output_directory']+'mzq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,z_data = local_zs,\
+																															q_data = local_qs)
 			print(('mq compression took '+str(time.time()-t_start_mq)+' s '))
 			t_start_J = time.time()
 			print('Compressing Jacobian data'.center(80))
@@ -654,12 +736,16 @@ class ActiveSubspaceProjector:
 
 		last_datum_generated = 0
 		output_dimension,input_dimension = self.Js[0].shape
+		if self.control_distribution is not None:
+			assert self.observable.problem.Vh[STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
+			control_dimension = self.z.get_local().shape[0]
 
 		rank = min(self.parameters['rank'],output_dimension,input_dimension)
 		local_Us = np.zeros((0,output_dimension, rank))	
 		local_sigmas = np.zeros((0,rank))
 		local_Vs = np.zeros((0,input_dimension, rank))
 		local_ms = np.zeros((0,input_dimension))
+		local_zs = np.zeros((0,control_dimension))
 		local_qs = np.zeros((0,output_dimension))
 		# Initialize arrays
 		if check_for_data:
@@ -689,10 +775,21 @@ class ActiveSubspaceProjector:
 					local_ms = local_ms[:last_datum_generated,:]
 				if local_qs.shape[0] > last_datum_generated:
 					local_qs = local_qs[:last_datum_generated,:]
-
+			if (self.control_distribution is not None) and os.path.isfile(output_directory+'zs_on_rank_'+str(my_rank)+'.npy'):
+				local_zs = np.load(output_directory+'zs_on_rank_'+str(my_rank)+'.npy')
+				last_z_generated = local_zs.shape[0]
+				if last_z_generated < last_datum_generated:
+					last_datum_generated = last_z_generated
+					# Update slices
+					local_Us = local_Us[:last_datum_generated,:,:]
+					local_sigmas = local_sigmas[:last_datum_generated,:]
+					local_Vs = local_Vs[:last_datum_generated,:,:]
+					local_ms = local_ms[:last_datum_generated,:]
+					local_qs = local_qs[:last_datum_generated,:]
 
 		# Generate the input output pairs that correspond to the 
 		assert len(self.ms) == self.parameters['samples_per_process']
+		assert len(self.zs) == self.parameters['samples_per_process']
 		assert len(self.us) == self.parameters['samples_per_process']
 		# If the us are updated in place then create a method for the observable that just applies B to u
 		t0_mq = time.time()
@@ -703,10 +800,15 @@ class ActiveSubspaceProjector:
 				print('Saving input output data pair '+str(i))
 
 			local_ms = np.concatenate((local_ms,np.expand_dims(self.ms[i].get_local(),0)))
+			
 			qi = self.observables[i].evalu(self.us[i]).get_local()
 			local_qs = np.concatenate((local_qs,np.expand_dims(qi,0)))
 			np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
 			np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+			if self.control_distribution is not None:
+				local_zs = np.concatentate((local_zs,np.expand_dims(self.zs[i].get_local(),0)))
+				np.save(output_directory+'zs_on_rank_'+str(my_rank)+'.npy',np.array(local_zs))
+
 			if self.parameters['verbose']:
 				print('On datum saved every ',(time.time() -t0_mq)/(i - last_datum_generated+1),' s, on average.')
 
@@ -738,8 +840,6 @@ class ActiveSubspaceProjector:
 			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
 			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
 			local_Vs = np.concatenate((local_Vs,np.expand_dims(mv_to_dense(V),0)))
-
-
 
 			if self.mesh_constructor_comm.rank == 0:
 				np.save(output_directory+'Us_on_rank_'+str(my_rank)+'.npy',np.array(local_Us))
@@ -984,7 +1084,18 @@ class ActiveSubspaceProjector:
 				t0 = time.time()
 				parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,self.ms[0])
-				x = [self.us[0],self.ms[0],None]
+				if self.control_distribution is not None:
+					assert self.zs is not None
+					if type(self.zs) is list:
+						assert self.zs[0] is not None
+						self.control_distribution.sample(self.zs[0])
+						x = [self.us[0],self.ms[0],None,self.zs[0]]
+					else:
+						assert self.z is not None
+						self.control_distribution.sample(self.z)
+						x = [self.us[0],self.ms[0],None,self.z]
+				else:
+					x = [self.us[0],self.ms[0],None]
 				self.observable.setLinearizationPoint(x)
 				LocalObservables[i].axpy(1.,self.observable.eval(self.ms[0]))
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
