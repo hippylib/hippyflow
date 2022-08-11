@@ -105,11 +105,15 @@ class SeriallySampledJacobianOperator:
 		self.nsamples = nsamples
 		self.average = average
 		self.ms = ms
-		if type(self.ms) is list:
-			# This is a unit-test case
-			self.zs = len(self.ms)*[None]
-		else:
+		if zs is not None:
 			self.zs = zs
+		else:
+			if type(self.ms) is list:
+				# This is a unit-test case
+				self.zs = len(self.ms)*[None]
+			else: 
+				self.zs = zs
+
 		
 		if communicator is None:
 			self.temp = None
@@ -383,6 +387,7 @@ class ActiveSubspaceProjector:
 		if self.Js is None:
 			self._initialize_batched_samples()
 
+
 		if self.parameters['verbose']:
 			print(80*'#')
 			print('Building derivative informed input subspace'.center(80))
@@ -447,6 +452,9 @@ class ActiveSubspaceProjector:
 		# ms_given is a unit testing case
 		if self.parameters['ms_given']:
 			assert self.ms is not None
+			if self.control_distribution is not None:
+				assert self.zs is not None
+				assert self.zs[0] is not None
 			Local_Average_Jacobian_Operator = SeriallySampledJacobianOperator(self.observable,self.noise,self.prior,operation = operation,\
 																				ms = self.ms,zs = self.zs)
 		else:
