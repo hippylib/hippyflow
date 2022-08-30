@@ -17,6 +17,8 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
+from .controlJacobian import ObservableControlJacobian
+
 from .fullStateObservable import StateSpaceIdentityOperator
 
 from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperSettings
