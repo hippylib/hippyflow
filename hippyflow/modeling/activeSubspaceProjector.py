@@ -618,6 +618,8 @@ class ActiveSubspaceProjector:
 		if control_jacobian:
 			assert (self.control_distribution is not None)
 
+		parameter_dimension = None
+
 		proc_id = int(self.collective.rank())
 		jacobian_process_specific_directory = self.parameters['output_directory']+'jacobian_data/proc_'+str(proc_id)+'/'
 		os.makedirs(jacobian_process_specific_directory,exist_ok = True)
@@ -638,6 +640,9 @@ class ActiveSubspaceProjector:
 			self.J = ObservableJacobian(self.observable)
 			output_dimension,parameter_dimension = self.J.shape
 			parameter_rank = min(self.parameters['jacobian_rank'],output_dimension,parameter_dimension)
+
+		if parameter_dimension is None:
+			parameter_dimension = self.m.size()
 
 		if control_jacobian:
 			self.Jz = ObservableControlJacobian(self.observable)
