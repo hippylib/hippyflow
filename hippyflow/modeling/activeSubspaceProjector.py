@@ -478,9 +478,13 @@ class ActiveSubspaceProjector:
 			m_mean = self.prior.mean
 			u_at_mean = self.observable.problem.generate_state()
 			if self.control_distribution is not None:
-				z_somehwere = self.observable.generate_vector(CONTROL)
-				self.control_distribution.sample(z_somehwere)
-				x_lin = [u_at_mean,m_mean,None,z_somehwere]
+				if hasattr(self.control_distribution,'mean'):
+					z_mean = self.control_distribution.mean
+				else:
+					# Sample it somewhere
+					z_mean = self.observable.generate_vector(CONTROL)
+					self.control_distribution.sample(z_mean)
+				x_lin = [u_at_mean,m_mean,None,z_mean]
 			else:
 				x_lin = [u_at_mean,m_mean,None]
 			
@@ -658,9 +662,13 @@ class ActiveSubspaceProjector:
 			m_mean = self.prior.mean
 			u_at_mean = self.observable.problem.generate_state()
 			if self.control_distribution is not None:
-				z_somehwere = self.observable.generate_vector(CONTROL)
-				self.control_distribution.sample(z_somehwere)
-				x_lin = [u_at_mean,m_mean,None,z_somehwere]
+				if hasattr(self.control_distribution,'mean'):
+					z_mean = self.control_distribution.mean
+				else:
+					# Sample it somewhere
+					z_mean = self.observable.generate_vector(CONTROL)
+					self.control_distribution.sample(z_mean)
+				x_lin = [u_at_mean,m_mean,None,z_mean]
 			else:
 				x_lin = [u_at_mean,m_mean,None]
 			
@@ -959,6 +967,7 @@ class ActiveSubspaceProjector:
 			- :code:`ranks` - a python list of integers specifying ranks for projection tests
 			- :code:`cut_off` - Where to truncate the ranks based on eigenvalue decay
 		"""
+		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
 		global_std_rel_errors_input, global_std_rel_errors_output = None, None
 		# ranks assumed to be python list with sort in place member function

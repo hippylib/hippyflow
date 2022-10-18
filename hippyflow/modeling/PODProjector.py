@@ -24,6 +24,8 @@ from ..utilities.mv_utilities import mv_to_dense
 from ..utilities.plotting import *
 from .priorPreconditionedProjector import PriorPreconditionedProjector
 
+CONTROL = 3
+
 
 def PODParameterList():
 	"""
@@ -46,7 +48,7 @@ class PODProjector:
 	"""
 	Projector class based on proper orthogonal decomposition
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = PODParameterList()):
+	def __init__(self,observable, prior, control_distribution = None, mesh_constructor_comm = None ,collective = None, parameters = PODParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -57,6 +59,8 @@ class PODProjector:
 		"""
 		self.observable = observable
 		self.prior = prior
+		self.control_distribution = control_distribution
+
 		if mesh_constructor_comm is not None:
 			self.mesh_constructor_comm = mesh_constructor_comm
 		else:
@@ -79,6 +83,10 @@ class PODProjector:
 
 		self.u = self.observable.generate_vector(STATE)
 		self.m = self.observable.generate_vector(PARAMETER)
+		if self.control_distribution is None:
+			self.z = None
+		else:
+			self.z = self.observable.generate_vector(CONTROL)
 
 
 		self.d = None
@@ -92,7 +100,15 @@ class PODProjector:
 		"""
 		m_mean = self.prior.mean
 		self.u_at_mean = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
+		if self.control_distribution is not None:
+			if hasattr(self.control_distribution,'mean'):
+				z_mean = self.control_distribution.mean
+			else:
+				z_mean = self.observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_mean)
+			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None,z_mean])
+		else:
+			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
 
 	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True,\
@@ -113,95 +129,177 @@ class PODProjector:
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
 		last_datum_generated = 0
-		m_shape = self.m.get_local().shape[0]
-		q_shape = observable_vector.get_local().shape[0]
-		print('m_shape = ',m_shape)
-		print('q_shape = ',q_shape)
+		parameter_dimension = self.m.get_local().shape[0]
+		output_dimension = observable_vector.get_local().shape[0]
+		print('dM = ',parameter_dimension)
+		print('dQ = ',output_dimension)
+		if self.control_distribution is not None:
+			control_dimension = self.z.get_local().shape[0]
+			print('dZ = ',control_dimension)
+		
 		if sequential:
 			rank_specific_directory = output_directory+'data_on_rank_'+str(my_rank)+'/'
 			os.makedirs(rank_specific_directory,exist_ok = True)
 			if check_for_data:
-				if os.path.isfile(rank_specific_directory+'ms_sample_'+str(my_rank)+'.npy') and \
-					os.path.isfile(rank_specific_directory+'qs_sample_'+str(my_rank)+'.npy'):
-					ms_generated = os.listdir(rank_specific_directory)
-					qs_generated = os.listdir(rank_specific_directory)
-					m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
-					last_m = max(m_indices)
-					q_indices = [int(m_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
-					last_q = max(q_indices)
-					last_datum_generated = min(last_m,last_q)
+				if self.control_distribution is not None:
+					if os.path.isfile(rank_specific_directory+'m_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'q_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'z_sample_0.npy'):
+						all_files = os.listdir(rank_specific_directory)
+						ms_generated = []
+						qs_generated = []
+						zs_generated = []
+						for file in all_files:
+							if 'm_' in file:
+								ms_generated.append(file)
+							elif 'q_' in file:
+								qs_generated.append(file)
+							elif 'z_' in file:
+								zs_generated.append(file)
+						m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+						last_m = max(m_indices)
+						q_indices = [int(q_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+						last_q = max(q_indices)
+						z_indices = [int(z_.split('z_sample_')[-1].split('.npy')[0]) for z_ in zs_generated]
+						last_z = max(z_indices)
+						last_datum_generated = min(last_m,last_q,last_z)
+				else:
+					if os.path.isfile(rank_specific_directory+'m_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'q_sample_0.npy'):
+						all_files = os.listdir(rank_specific_directory)
+						ms_generated = []
+						qs_generated = []
+						for file in all_files:
+							if 'm_' in file:
+								ms_generated.append(file)
+							elif 'q_' in file:
+								qs_generated.append(file)
+						m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+						last_m = max(m_indices)
+						q_indices = [int(q_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+						last_q = max(q_indices)
+						last_datum_generated = min(last_m,last_q)
 
 			t0 = time.time()
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
 				print('Generating data number '+str(i))
-				parRandom.normal(1,self.noise)
-				self.prior.sample(self.noise,self.m)
-				self.u.zero()
-				self.u.axpy(1.,self.u_at_mean)
-				try:
-					this_q = self.observable.eval(self.m).get_local()
-					this_m = self.m.get_local()
-					np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
-					np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
-					# If there is an issue with the solve move on
-				except:
-					print('Issue with the nonlinear solve, moving on')
-					pass
-				
-				if self.parameters['verbose']:
-					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+				solved = False
+				while not solved:
+					try:
+						self.m.zero()
+						self.noise.zero()
+						parRandom.normal(1,self.noise)
+						self.prior.sample(self.noise,self.m)
+						if self.control_distribution is None:
+							linearization_x = [self.u,self.m,None]
+						else:
+							self.z.zero()
+							self.control_distribution.sample(self.z)
+							linearization_x = [self.u,self.m,None,self.z]
+
+						self.observable.solveFwd(self.u,linearization_x)
+						this_m = self.m.get_local()
+						this_q = self.observable.evalu(self.u).get_local()
+						
+						np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
+						np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
+
+						if self.control_distribution is not None:
+							this_z = self.z.get_local()
+							np.save(rank_specific_directory+'z_sample_'+str(i)+'.npy',this_z)
+					except:
+						print('Issue with the forward solution, moving on.')
+
+					if self.parameters['verbose']:
+						print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
 			if compress_files:
-				local_ms = np.zeros((self.parameters['data_per_process'],m_shape))
-				local_qs = np.zeros((self.parameters['data_per_process'],q_shape))
+				local_ms = np.zeros((self.parameters['data_per_process'],parameter_dimension))
+				local_qs = np.zeros((self.parameters['data_per_process'],output_dimension))
+				if self.control_distribution is not None:
+					local_zs = np.zeros((self.parameters['data_per_process'],control_dimension))
 				for i in range(0,self.parameters['data_per_process']):
 					local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 					local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-				np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+					if self.control_distribution is not None:
+						local_zs[i] = np.load(rank_specific_directory+'z_sample_'+str(i)+'.npy')
+				if self.control_distribution is not None:
+					np.savez_compressed(output_directory+'mqz_on_rank'+str(my_rank)+'.npz',m_data = local_ms,\
+										q_data = local_qs, z_data = local_zs)
+				else:
+					np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 
 		else:
 
-			local_ms = np.zeros((0,m_shape))
-			local_qs = np.zeros((0,q_shape))
+			local_ms = np.zeros((0,parameter_dimension))
+			local_qs = np.zeros((0,output_dimension))
+			if self.control_distribution is not None:
+				local_zs = np.zeros((0,control_distribution))
+
 			if check_for_data:
 				if os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
 					os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
 					local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
 					local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
-					last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
+					if control_distribution is not None:
+						local_zs = np.load(output_directory+'zs_on_rank_'+str(my_rank)+'.npy')
+						last_datum_generated = min(local_ms.shape[0],local_qs.shape[0],local_zs.shape[0])
+					else:
+						last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
 
 			t0 = time.time()
 			# I think this is all hard coded for a single serial mesh, check if 
 			# the arrays need to be communicated to mesh rank 0 before being saved
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
-				print('Generating data number '+str(i))
-				parRandom.normal(1,self.noise)
-				self.prior.sample(self.noise,self.m)
-				
-				self.u.zero()
-				self.u.axpy(1.,self.u_at_mean)
-				x = [self.u,self.m,None]
-				self.observable.setLinearizationPoint(x)
-				solution = self.observable.eval(self.m).get_local()
-				# If there is an issue with the solve move on
-				# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-				# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-				# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-				# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-				try:
-					solution = self.observable.eval(self.m).get_local()
-					# If there is an issue with the solve move on
-					local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-					local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-					np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-					np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-				except:
-					print('Issue with the nonlinear solve, moving on')
-					pass
-				
+				solved = False
+				while not solved:
+					try:
+						print('Generating data number '+str(i))
+						parRandom.normal(1,self.noise)
+						self.prior.sample(self.noise,self.m)
+						self.u.zero()
+						self.u.axpy(1.,self.u_at_mean)
+
+
+						if self.control_distribution is not None:
+							self.z.zero()
+							self.control_distribution.sample(self.z)
+							linearization_x = [self.u,self.m,None,self.z]
+						else:
+							linearization_x = [self.u,self.m,None]
+
+
+						self.observable.solveFwd(self.u,linearization_x)
+						this_m = self.m.get_local()
+						this_q = self.observable.evalu(self.u).get_local()
+						local_qs = np.concatenate((local_qs,np.expand_dims(this_q,0)))
+						local_ms = np.concatenate((local_ms,np.expand_dims(this_m,0)))
+						np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+						np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+						if self.control_distribution is not None:
+							this_z = self.z.get_local()
+							local_zs = np.concatenate((local_zs,np.expand_dims(this_z,0)))
+							np.save(output_directory+'zs_on_rank_'+str(my_rank)+'.npy',np.array(local_zs))
+
+					except:
+						print('Issue with nonlinear solve, moving on')
 				if self.parameters['verbose']:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
+
+	# Got to this point with re-working
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 	def construct_subspace(self):
@@ -267,6 +365,7 @@ class PODProjector:
 			- :code:`ranks` - a python list of integers specifying ranks for projection tests
 			- :code:`cut_off` - where to truncate the ranks based on the spectral decay of the POD operator
 		"""
+		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		ranks.sort()
 		if (self.d is None) or (self.U_MV is None):
 			if self.mesh_constructor_comm.rank == 0:
@@ -393,6 +492,7 @@ class PODProjector:
 			- :code:`rank_pairs` - a python list of 2-tuples of ints specifying the input and output ranks 
 				to be used in the projection error test.
 		"""
+		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		for (rank_in,rank_out) in rank_pairs:
 			assert rank_in <=V_MV.nvec()
 			assert rank_out <= self.U_MV.nvec()
