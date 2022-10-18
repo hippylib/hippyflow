@@ -774,7 +774,7 @@ class ActiveSubspaceProjector:
 				t_start_J = time.time()
 				print('Compressing Jacobian data'.center(80))
 				local_Us = np.zeros((self.parameters['jacobian_data_per_process'],output_dimension,parameter_rank))
-				local_sigmas = np.zeros((self.parameters['jacobian_data_per_process'],rank))
+				local_sigmas = np.zeros((self.parameters['jacobian_data_per_process'],parameter_rank))
 				local_Vs = np.zeros((self.parameters['jacobian_data_per_process'],parameter_dimension,parameter_rank))
 				for i in range(0,self.parameters['jacobian_data_per_process']):
 					local_Us[i] = np.load(jacobian_process_specific_directory+'U_sample_'+str(i)+'.npy')
