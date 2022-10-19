@@ -379,9 +379,14 @@ class PODProjector:
 			t0 = time.time()
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
-			x = [self.u,self.m,None]
-			self.observable.setLinearizationPoint(x)
-			LocalObservables[i].axpy(1.,self.observable.eval(self.m))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
+			self.observable.solveFwd(self.u,x)
+			LocalObservables[i].axpy(1.,self.observable.evalu(self.u∂))
 			# if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			# 	print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
 
@@ -430,7 +435,7 @@ class PODProjector:
 			if self.mesh_constructor_comm.rank == 0:
 				print('Global average relative error = ',global_avg_rel_errors[-1])
 
-		return global_avg_rel_errors, global_std_rel_errors
+		return global_avg_rel_errors, global_std_rel_errors∂
 
 
 	def two_state_solution(self):
@@ -444,9 +449,22 @@ class PODProjector:
 			print('||m_mean|| = ',m_mean.norm('l2'))
 		m_mean_pvd = dl.File(save_states_dir+'m_mean.pvd')
 		m_mean_pvd << vector2Function(m_mean,self.observable.problem.Vh[PARAMETER])
-
 		u_at_mean = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+
+		if self.control_distribution is not None:
+			if hasattr(self.control_distribution,'mean'):
+				z_mean = self.control_distribution.mean
+			else:
+				print('Substituting a sample of z for z_mean, since ')
+				print('control_distribution did not have a mean attribute.')
+				z_mean = self.observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_mean)
+
+			linearization_x = [u_at_mean,m_mean,None,z_mean]
+		else:
+			linearization_x = [u_at_mean,m_mean,None]
+
+		self.observable.problem.solveFwd(u_at_mean,linearization_x)
 
 		if self.parameters['verbose']:
 			print('||v_at_mean|| = ',u_at_mean.norm('l2'))
@@ -464,7 +482,14 @@ class PODProjector:
 		m_sample_pvd << vector2Function(m_sample,self.observable.problem.Vh[PARAMETER])
 
 		u_at_sample = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(u_at_sample,[u_at_sample,m_sample,None])
+		if self.control_distribution is not None:
+			z_sample = self.observable.generate_vector(CONTROL)
+			self.control_distribution.sample(z_sample)
+			linearization_x = [u_at_mean,m_mean,None,z_sample]
+		else:
+			linearization_x = [u_at_mean,m_mean,None]
+
+		self.observable.problem.solveFwd(u_at_sample,linearization_x)
 
 		if self.parameters['verbose']:
 			print('||v_at_sample|| = ',u_at_sample.norm('l2'))
@@ -507,9 +532,14 @@ class PODProjector:
 		for i in range(LocalObservables.nvec()):
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,LocalParameters[i])
-			x = [self.u,LocalParameters[i],None]
-			self.observable.setLinearizationPoint(x)
-			LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				linearization_x = [self.u,LocalParameters[i],None,self.z]
+			else:
+				linearization_x = [self.u,LocalParameters[i],None]
+			self.observable.solveFwd(self.u,linearization_x)
+			LocalObservables[i].axpy(1.,self.observable.evalu(self.u))
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			print('Generating ',LocalObservables.nvec(),' local parameters and observables for POD error test took',time.time() -t0, 's')
 
@@ -556,9 +586,15 @@ class PODProjector:
 				LocalErrors[i].axpy(1.,LocalObservables[i])
 				denominator = LocalErrors[i].norm('l2')
 				InputProjectorOperator.mult(LocalParameters[i],input_projection_vector)
-				x = [self.u,input_projection_vector,None]
-				self.observable.setLinearizationPoint(x)
-				reduced_q_vector.axpy(1.,self.observable.eval(input_projection_vector))
+				if self.control_distribution is not None:
+					self.z.zero()
+					self.control_distribution.sample(self.z)
+					linearization_x = [self.u,input_projection_vector,None, self.z]
+				else:
+					linearization_x = [self.u,input_projection_vector,None]
+
+				self.observable.solveFwd(self.u,linearization_x)
+				reduced_q_vector.axpy(1.,self.observable.evalu(self.u))
 
 				PODOperator.mult(reduced_q_vector,output_projection_vector)
 				LocalErrors[i].axpy(-1.,output_projection_vector)

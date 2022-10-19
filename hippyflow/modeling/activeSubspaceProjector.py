@@ -607,7 +607,7 @@ class ActiveSubspaceProjector:
 					parameter_jacobian = False,control_jacobian = True)
 		else:
 			raise
-			self._construct_low_rank_Jacobians_batched(check_for_data = check_for_data)
+			self._construct_low_rank_Jacobians_batched(check_for_data = check_for_data, control_jacobian = True)
 
 	def _construct_low_rank_Jacobians_serial(self,check_for_data = True,compress_files = True,\
 						parameter_jacobian = True, control_jacobian = False):
@@ -967,7 +967,6 @@ class ActiveSubspaceProjector:
 			- :code:`ranks` - a python list of integers specifying ranks for projection tests
 			- :code:`cut_off` - Where to truncate the ranks based on eigenvalue decay
 		"""
-		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		global_avg_rel_errors_input, global_avg_rel_errors_output = None, None
 		global_std_rel_errors_input, global_std_rel_errors_output = None, None
 		# ranks assumed to be python list with sort in place member function
@@ -1038,7 +1037,7 @@ class ActiveSubspaceProjector:
 					print('Naive global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
 
 			# Double Loop MC Error test does not work when prior preconditioning is used.
-			# This will be fixed soon.
+			# This will be fixed soon. Or someday.
 			if False:
 				if self.d_GN is None:
 					if self.mesh_constructor_comm.rank == 0:
