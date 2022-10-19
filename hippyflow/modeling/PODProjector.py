@@ -287,20 +287,6 @@ class PODProjector:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
 
-	# Got to this point with re-working
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 	def construct_subspace(self):
 		"""
@@ -320,13 +306,17 @@ class PODProjector:
 			observable_vector.zero()
 			parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
-			x = [self.u,self.m,None]
-			self.observable.setLinearizationPoint(x)
-			observable_vector.axpy(1.,self.observable.eval(self.m))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
+			self.observable.solveFwd(self.u,x)
+			observable_vector.axpy(1.,self.observable.evalu(self.u))
 			LocalObservables[i].axpy(1.,observable_vector)
 
 		init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-
 		LocalPODOperator = LowRankOperator(np.ones(LocalObservables.nvec())/self.parameters['sample_per_process']\
 																			,LocalObservables,init_vector_lambda)
 
