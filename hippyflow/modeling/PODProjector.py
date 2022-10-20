@@ -465,7 +465,7 @@ class PODProjector:
 			if self.mesh_constructor_comm.rank == 0:
 				print('Global average relative error = ',global_avg_rel_errors[-1])
 
-		return global_avg_rel_errors, global_std_rel_errors∂
+		return global_avg_rel_errors, global_std_rel_errors
 
 
 	def two_state_solution(self):
