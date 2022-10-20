@@ -76,6 +76,7 @@ class LinearStateObservable:
 			- prior: the prior 
 		"""
 		self.problem = problem
+		self.is_control_problem = hasattr(self.problem,'Cz')
 		self.B = B
 		# self.Bu = dl.Vector(self.B.mpi_comm())
 		# self.B.init_vector(self.Bu,0)
@@ -121,7 +122,7 @@ class LinearStateObservable:
 		elif component == ADJOINT:
 			x = self.problem.generate_state()
 		elif component == 3:
-			assert hasattr(self.problem,'Cz'), 'Assuming it is a control problem'
+			assert self.is_control_problem, 'Assuming it is a control problem'
 			# 3 denotes a control variable needs to be generated
 			x = self.problem.generate_control()
 
@@ -144,6 +145,7 @@ class LinearStateObservable:
 			# self.model.init_parameter(x)
 			self.problem.C.init_vector(x,1)
 		elif dim == 3:
+			assert self.is_control_problem, 'Assuming it is a control problem'
 			self.problem.Cz.init_vector(x,1)
 		else: 
 			raise
@@ -158,7 +160,7 @@ class LinearStateObservable:
 		self.problem.init_parameter(m)
 
 			
-	def eval(self, m, u0 = None,setLinearizationPoint = False):
+	def eval(self, m, u0 = None, z = None, setLinearizationPoint = False):
 		"""
 		Given the input parameter :code:`m` solve for the state field $u(m)$, and evaluate 
 		the linear state observable $Bu(m)$
@@ -168,7 +170,11 @@ class LinearStateObservable:
 		"""
 		if u0 is None:
 			u0 = self.problem.generate_state()
-		x = [u0, m, None]
+		if self.is_control_problem:
+			assert z is not None
+			x = [u0,m,None,z]
+		else:
+			x = [u0, m, None]
 		self.problem.solveFwd(u0,x)
 		if setLinearizationPoint:
 			self.setLinearizationPoint(x)

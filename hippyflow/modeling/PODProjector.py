@@ -287,6 +287,36 @@ class PODProjector:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
 
+	def save_mass_and_stiffness_matrices(self,output_directory = 'data/'):
+		"""
+		This method saves mass and stiffness matrices 
+		"""
+		# Save mass matrix
+		os.makedirs(output_directory,exist_ok = True)
+		import scipy.sparse as sp
+
+		u_trial = dl.TrialFunction(self.observable.problem.Vh[STATE])
+		u_test = dl.TestFunction(self.observable.problem.Vh[STATE])
+		M = dl.PETScMatrix()
+		dl.assemble(dl.inner(u_trial,u_test)*dl.dx, tensor=M)
+		
+		# from scipy.sparse import csc_matrix, csr_matrix, save_npz
+		# from scipy.sparse import linalg as spla
+
+		M_mat = dl.as_backend_type(M).mat()
+		row,col,val = M_mat.getValuesCSR()
+		M_csr = sp.csr_matrix((val,row,col)) 
+		sp.save_npz(output_directory+'mass_csr',M_csr)
+
+		# Save stiffness matrix
+		K = dl.PETScMatrix()
+		dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
+		K_mat = dl.as_backend_type(K).mat()
+		row,col,val = M_mat.getValuesCSR()
+		K_csr = sp.csr_matrix((val,row,col)) 
+		sp.save_npz(output_directory+'stiffness_csr',K_csr)
+
+
 
 	def construct_subspace(self):
 		"""
@@ -386,7 +416,7 @@ class PODProjector:
 			else:
 				x = [self.u,self.m,None]
 			self.observable.solveFwd(self.u,x)
-			LocalObservables[i].axpy(1.,self.observable.evalu(self.u∂))
+			LocalObservables[i].axpy(1.,self.observable.evalu(self.u))
 			# if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			# 	print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
 
