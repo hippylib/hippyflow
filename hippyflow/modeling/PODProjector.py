@@ -111,8 +111,8 @@ class PODProjector:
 			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
 
-	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True,\
-																			compress_files = True):
+	def generate_training_data(self,check_for_data = True,sequential = True,\
+										compress_files = True):
 		"""
 		This method generates training data
 			- :code:`output_directory` - a string specifying the path to the directory where data
@@ -122,10 +122,10 @@ class PODProjector:
 		"""
 		self.solve_at_mean()
 		my_rank = int(self.collective.rank())
-		try:
-			os.makedirs(output_directory)
-		except:
-			pass
+		output_directory = self.parameters['output_directory']
+
+		os.makedirs(output_directory,exist_ok = True)
+
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
 		last_datum_generated = 0
@@ -287,11 +287,12 @@ class PODProjector:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
 
-	def save_mass_and_stiffness_matrices(self,output_directory = 'data/'):
+	def save_mass_and_stiffness_matrices(self):
 		"""
 		This method saves mass and stiffness matrices 
 		"""
 		# Save mass matrix
+		output_directory = self.parameters['output_directory']
 		os.makedirs(output_directory,exist_ok = True)
 		import scipy.sparse as sp
 
@@ -305,7 +306,7 @@ class PODProjector:
 
 		M_mat = dl.as_backend_type(M).mat()
 		row,col,val = M_mat.getValuesCSR()
-		M_csr = sp.csr_matrix((val,row,col)) 
+		M_csr = sp.csr_matrix((val,col,row)) 
 		sp.save_npz(output_directory+'mass_csr',M_csr)
 
 		# Save stiffness matrix
@@ -313,7 +314,7 @@ class PODProjector:
 		dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
 		K_mat = dl.as_backend_type(K).mat()
 		row,col,val = M_mat.getValuesCSR()
-		K_csr = sp.csr_matrix((val,row,col)) 
+		K_csr = sp.csr_matrix((val,col,row)) 
 		sp.save_npz(output_directory+'stiffness_csr',K_csr)
 
 
