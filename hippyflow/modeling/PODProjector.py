@@ -313,7 +313,7 @@ class PODProjector:
 		K = dl.PETScMatrix()
 		dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
 		K_mat = dl.as_backend_type(K).mat()
-		row,col,val = M_mat.getValuesCSR()
+		row,col,val = K_mat.getValuesCSR()
 		K_csr = sp.csr_matrix((val,col,row)) 
 		sp.save_npz(output_directory+'stiffness_csr',K_csr)
 
