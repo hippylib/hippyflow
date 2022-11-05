@@ -113,7 +113,7 @@ class hippylibModelWrapper:
 			- or partially precompute the block of the hessian (if feasible)
 		"""
 		x[hp.ADJOINT] = self.model.generate_vector(hp.ADJOINT)
-		self.problem.setLinearizationPoint(x, True)
+		self.model.problem.setLinearizationPoint(x, True)
 
 
 	def evalVariationalGradient(self,x,u0 = None,setLinearizationPoint = False,misfit_only = True):
@@ -319,6 +319,8 @@ class hippylibModelWrapper:
 
 
 	def samplePrior(self):
+		"""
+		"""
 		if self.noise_help is None:
 			self.noise_help = dl.Vector()
 			self.model.prior.init_vector(self.noise_help,"noise")
@@ -335,7 +337,7 @@ class hippylibModelWrapper:
 
 		return self.sample_help
 
-	def setUpInverseProblem(self):
+	def setUpInverseProblem(self,mtrue_expr = None):
 		"""
 		"""
 		assert self.settings['rel_noise'] is not None
@@ -343,9 +345,16 @@ class hippylibModelWrapper:
 		if self.mtrue is None:
 			self.mtrue = dl.Vector()
 			self.model.prior.init_vector(self.mtrue,0)
-		self.mtrue.zero()
-		# self.mtrue.axpy(1.0,self.samplePrior())
-		self.mtrue.set_local(self.samplePrior().get_local())
+
+		if mtrue_expr is None:
+			self.mtrue.zero()
+			# self.mtrue.axpy(1.0,self.samplePrior())
+			self.mtrue.set_local(self.samplePrior().get_local())
+		else:
+			mtrue_func = dl.Function(self.model.problem.Vh[hp.PARAMETER])
+			mtrue_func.interpolate(mtrue_expr)
+			self.mtrue.zero()
+			self.mtrue.axpy(1.,mtrue_func.vector())
 
 		self.model.misfit.d.zero()
 
