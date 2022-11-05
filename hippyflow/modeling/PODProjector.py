@@ -291,31 +291,32 @@ class PODProjector:
 		"""
 		This method saves mass and stiffness matrices 
 		"""
-		# Save mass matrix
-		output_directory = self.parameters['output_directory']
-		os.makedirs(output_directory,exist_ok = True)
-		import scipy.sparse as sp
+		if MPI.COMM_WORLD.rank == 0:
+			# Save mass matrix
+			output_directory = self.parameters['output_directory']
+			os.makedirs(output_directory,exist_ok = True)
+			import scipy.sparse as sp
 
-		u_trial = dl.TrialFunction(self.observable.problem.Vh[STATE])
-		u_test = dl.TestFunction(self.observable.problem.Vh[STATE])
-		M = dl.PETScMatrix(self.mesh_constructor_comm)
-		dl.assemble(dl.inner(u_trial,u_test)*dl.dx, tensor=M)
-		
-		# from scipy.sparse import csc_matrix, csr_matrix, save_npz
-		# from scipy.sparse import linalg as spla
+			u_trial = dl.TrialFunction(self.observable.problem.Vh[STATE])
+			u_test = dl.TestFunction(self.observable.problem.Vh[STATE])
+			M = dl.PETScMatrix(self.mesh_constructor_comm)
+			dl.assemble(dl.inner(u_trial,u_test)*dl.dx, tensor=M)
+			
+			# from scipy.sparse import csc_matrix, csr_matrix, save_npz
+			# from scipy.sparse import linalg as spla
 
-		M_mat = dl.as_backend_type(M).mat()
-		row,col,val = M_mat.getValuesCSR()
-		M_csr = sp.csr_matrix((val,col,row)) 
-		sp.save_npz(output_directory+'mass_csr',M_csr)
+			M_mat = dl.as_backend_type(M).mat()
+			row,col,val = M_mat.getValuesCSR()
+			M_csr = sp.csr_matrix((val,col,row)) 
+			sp.save_npz(output_directory+'mass_csr',M_csr)
 
-		# Save stiffness matrix
-		K = dl.PETScMatrix(self.mesh_constructor_comm)
-		dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
-		K_mat = dl.as_backend_type(K).mat()
-		row,col,val = K_mat.getValuesCSR()
-		K_csr = sp.csr_matrix((val,col,row)) 
-		sp.save_npz(output_directory+'stiffness_csr',K_csr)
+			# Save stiffness matrix
+			K = dl.PETScMatrix(self.mesh_constructor_comm)
+			dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
+			K_mat = dl.as_backend_type(K).mat()
+			row,col,val = K_mat.getValuesCSR()
+			K_csr = sp.csr_matrix((val,col,row)) 
+			sp.save_npz(output_directory+'stiffness_csr',K_csr)
 
 
 
