@@ -110,7 +110,6 @@ class PODProjector:
 		else:
 			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
 
-
 	def generate_training_data(self,check_for_data = True,sequential = True,\
 										compress_files = True):
 		"""
@@ -212,6 +211,7 @@ class PODProjector:
 
 					if self.parameters['verbose']:
 						print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+
 			self._data_generation_time = time.time() - t0
 			if compress_files:
 				local_ms = np.zeros((self.parameters['data_per_process'],parameter_dimension))
