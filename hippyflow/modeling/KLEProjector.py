@@ -30,12 +30,10 @@ def KLEParameterList():
 	This function implements the parameter list for the KLE object
 	"""
 	parameters = {}
-	parameters['sample_per_process'] 	= [100, 'Number of samples per process']
 	parameters['error_test_samples'] 		= [50, 'Number of samples for error test']
-	parameters['rank'] 				 	= [128, 'Rank of subspace']
-	parameters['oversampling'] 		 	= [10, 'Oversampling parameter for randomized algorithms']
-	parameters['verbose']				= [True, 'Boolean for printing']
-
+	parameters['rank'] 				 		= [128, 'Rank of subspace']
+	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
+	parameters['verbose']					= [True, 'Boolean for printing']
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
