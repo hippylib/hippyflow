@@ -440,7 +440,7 @@ class ActiveSubspaceProjector:
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
-			name = 'AS_'
+			name = 'AS_'+str(int(self.parameters['samples_per_process']*self.communicator.size()))
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
@@ -534,7 +534,7 @@ class ActiveSubspaceProjector:
 				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
 		
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
-			name = 'AS_'
+			name = 'AS_'+str(int(self.parameters['samples_per_process']*self.communicator.size()))
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
@@ -595,7 +595,7 @@ class ActiveSubspaceProjector:
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
-			name = 'AS_'
+			name = 'AS_'+str(int(self.parameters['samples_per_process']*self.communicator.size()))
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
