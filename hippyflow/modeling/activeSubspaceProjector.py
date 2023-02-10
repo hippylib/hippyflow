@@ -374,18 +374,18 @@ class ActiveSubspaceProjector:
 			print('Initializing all batched samples took ',total_init_time, 's ')
 
 
-	def construct_input_subspace(self,prior_preconditioned = True):
+	def construct_input_subspace(self,prior_preconditioned = True,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized AS construction'.center(80))
 			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
 			print('Construction via batched AS construction'.center(80))
-			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned)
+			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned,name_suffix = name_suffix)
 
 
 
 
-	def _construct_input_subspace_batched(self,prior_preconditioned = True):
+	def _construct_input_subspace_batched(self,prior_preconditioned = True,name_suffix = None):
 		"""
 		This method implements the input subspace constructor 
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
@@ -440,15 +440,19 @@ class ActiveSubspaceProjector:
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
-			np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
-			np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
+			name = 'AS_'
+			if name_suffix is not None:
+				assert type(name_suffix) is str
+				name += name_suffix
+			np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+			np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 
-			out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+			plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
-				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 
-	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ'):
+	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ',name_suffix = None):
 		"""
 		This method implements the input subspace constructor 
 			-:code:`prior_preconditioned` - a Boolean to decide whether to include the prior covariance in the decomposition
@@ -530,30 +534,34 @@ class ActiveSubspaceProjector:
 				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
 		
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
+			name = 'AS_'
+			if name_suffix is not None:
+				assert type(name_suffix) is str
+				name += name_suffix
 			if operation == 'JTJ':
-				np.save(self.parameters['output_directory']+'AS_input_projector',mv_to_dense(self.V_GN))
-				np.save(self.parameters['output_directory']+'AS_d_GN',self.d_GN)
-				out_name = self.parameters['output_directory']+'AS_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
+				plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 				_ = spectrum_plot(self.d_GN,\
 					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 			if operation == 'JJT':
-				np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
-				np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
+				np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
-				out_name = self.parameters['output_directory']+'AS_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+				plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 				_ = spectrum_plot(self.d_NG,\
 					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 
-	def construct_output_subspace(self):
+	def construct_output_subspace(self,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized construction'.center(80))
-			self._construct_serialized_jacobian_subspace(operation = 'JJT')
+			self._construct_serialized_jacobian_subspace(operation = 'JJT',name_suffix = name_suffix)
 		else:
-			self._construct_output_subspace_batched()
+			self._construct_output_subspace_batched(name_suffix = name_suffix)
 
-	def _construct_output_subspace_batched(self):
+	def _construct_output_subspace_batched(self,name_suffix = None):
 		"""
 		This method implements the output subspace constructor 
 		"""
@@ -587,13 +595,17 @@ class ActiveSubspaceProjector:
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
-			np.save(self.parameters['output_directory']+'AS_output_projector',mv_to_dense(self.U_NG))
-			np.save(self.parameters['output_directory']+'AS_d_NG',self.d_NG)
+			name = 'AS_'
+			if name_suffix is not None:
+				assert type(name_suffix) is str
+				name += name_suffix
+			np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+			np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
-			out_name = self.parameters['output_directory']+'AS_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
+			plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_NG,\
 				axis_label = ['i',r'$\lambda_i$',\
-				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = out_name)
+				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
 		if self.parameters['serialized_sampling']:
