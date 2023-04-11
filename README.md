@@ -82,10 +82,10 @@ import ufl
 import numpy as np
 import sys, os
 sys.path.append(os.environ.get('HIPPYLIB_PATH'))
-from hippylib import *
+import hippylib as hp
 
 sys.path.append(os.environ.get('HIPPYFLOW_PATH'))
-from hippyflow import *
+import hippyflow as hf
 
 # Set up PDE Variational Problem and observable using a function
 def build_observable(mesh, **kwargs):
@@ -96,16 +96,19 @@ def build_observable(mesh, **kwargs):
 	Vh = [Vh2, Vh1, Vh2]
 	# Initialize Expressions
 	f = dl.Constant(0.0)
+	
+	def u_boundary(x,on_boundary):
+	    return on_boundary
 		
 	u_bdr = dl.Expression("x[1]", degree=1)
 	u_bdr0 = dl.Constant(0.0)
-	bc = dl.DirichletBC(Vh[STATE], u_bdr, u_boundary)
-	bc0 = dl.DirichletBC(Vh[STATE], u_bdr0, u_boundary)
+	bc = dl.DirichletBC(Vh[hp.STATE], u_bdr, u_boundary)
+	bc0 = dl.DirichletBC(Vh[hp.STATE], u_bdr0, u_boundary)
 	
 	def pde_varf(u,m,p):
 		return ufl.exp(m)*ufl.inner(ufl.grad(u), ufl.grad(p))*ufl.dx - f*p*ufl.dx
 
-	pde = PDEVariationalProblem(Vh, pde_varf, bc, bc0, is_fwd_linear=True)
+	pde = hp.PDEVariationalProblem(Vh, pde_varf, bc, bc0, is_fwd_linear=True)
 
 	# Instance observable operator (in this case pointwise observation of state)
 	x_targets = np.linspace(0.1,0.9,10)
@@ -116,8 +119,8 @@ def build_observable(mesh, **kwargs):
 			targets.append((xi,yi))
 	targets = np.array(targets)
 
-	B = assemblePointwiseObservation(Vh[STATE], targets)
-	return LinearStateObservable(pde,B)
+	B = hp.assemblePointwiseObservation(Vh[hp.STATE], targets)
+	return hf.LinearStateObservable(pde,B)
 
 # Set up mesh
 ndim = 2
@@ -129,15 +132,15 @@ observable_kwargs = {} # No kwargs given in this example
 observable = build_observable(mesh,**observable_kwargs)
 
 # Instance probability distribution for the parameter
-prior = BiLaplacian2D(Vh[PARAMETER],gamma = 0.1, delta = 1.0)
+prior = hp.BiLaplacian2D(observable.problem.Vh[hp.PARAMETER],gamma = 0.1, delta = 1.0)
 
 # Instance Active Subspace Operator
-AS = ActiveSubspaceProjector(observable,prior)
+AS = hf.ActiveSubspaceProjector(observable,prior)
 # Compute and save input reduced basis to file:
 AS.construct_input_subspace()
 
 # Instance POD Operator to compute POD basis and training data
-POD = PODProjector(observable,prior)
+POD = hf.PODProjector(observable,prior)
 POD.construct_subspace()
 output_directory = 'location/for/training/data/'
 POD.generate_training_data(output_directory)
@@ -181,7 +184,7 @@ These publications use the hippyflow library
 
 [**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://www.sciencedirect.com/science/article/pii/S0045782521005302).
 Computer Methods in Applied Mechanics and Engineering. Volume 388, 1 January 2022, 114199.
-([Download](https://arxiv.org/pdf/2011.15110.pdf))<details><summary>BibTeX</summary><pre>
+([Download](https://www.sciencedirect.com/science/article/pii/S0045782521005302))<details><summary>BibTeX</summary><pre>
 @article{OLearyRoseberryVillaChenEtAl2022,
   title={Derivative-informed projected neural networks for high-dimensional parametric maps governed by {PDE}s},
   author={O’Leary-Roseberry, Thomas and Villa, Umberto and Chen, Peng and Ghattas, Omar},
@@ -194,14 +197,46 @@ Computer Methods in Applied Mechanics and Engineering. Volume 388, 1 January 202
 }</pre></details>
 
 - \[2\] O'Leary-Roseberry, T., Du, X., Chaudhuri, A., Martins, J., Willcox, K., Ghattas, O.,
-[**Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data**](https://arxiv.org/abs/2112.07096).
-arXiv:2112.07096.
-([Download](https://arxiv.org/pdf/2112.07096.pdf))<details><summary>BibTeX</summary><pre>
-@article{OLearyRoseberryDuChaudhuriEtAl2021,
-  title={Adaptive Projected Residual Networks for Learning Parametric Maps from Sparse Data},
-  author={O'Leary-Roseberry, Thomas and Du, Xiaosong, and Chaudhuri, Anirban, and Martins Joaqium R. R. A., and Willcox, Karen, and Ghattas, Omar},
-  journal={arXiv preprint arXiv:2112.07096},
-  year={2021}
+[**Learning high-dimensional parametric maps via reduced basis adaptive residual networks**](https://www.sciencedirect.com/science/article/abs/pii/S0045782522006855).
+Computer Methods in Applied Mechanics and Engineering. Volume 402, December 2022, 115730.
+([Download](https://www.sciencedirect.com/science/article/abs/pii/S0045782522006855))<details><summary>BibTeX</summary><pre>
+@article{OLearyRoseberryDuChaudhuriEtAl2022,
+  title={Learning high-dimensional parametric maps via reduced basis adaptive residual networks},
+  author={O’Leary-Roseberry, Thomas and Du, Xiaosong and Chaudhuri, Anirban and Martins, Joaquim RRA and Willcox, Karen and Ghattas, Omar},
+  journal={Computer Methods in Applied Mechanics and Engineering},
+  volume={402},
+  pages={115730},
+  year={2022},
+  publisher={Elsevier}
 }
 }</pre></details>
 
+- \[3\] Wu, K., O'Leary-Roseberry, T., Chen, P., Ghattas, O.,
+[**Large-Scale Bayesian Optimal Experimental Design with Derivative-Informed Projected Neural Network**](https://link.springer.com/article/10.1007/s10915-023-02145-1).
+Journal of Scientific Computing 95. Article number: 30 (2023)
+([Download](https://link.springer.com/article/10.1007/s10915-023-02145-1))<details><summary>BibTeX</summary><pre>
+@article{WuOLearyRoseberryChenEtAl2023,
+  title={Large-Scale {B}ayesian Optimal Experimental Design with Derivative-Informed Projected Neural Network},
+  author={Wu, Keyi and O’Leary-Roseberry, Thomas and Chen, Peng and Ghattas, Omar},
+  journal={Journal of Scientific Computing},
+  volume={95},
+  number={1},
+  pages={30},
+  year={2023},
+  publisher={Springer}
+}
+}</pre></details>
+
+- \[4\] Cao, L., O'Leary-Roseberry, T., Jha, P., Oden, J.T., Ghattas, O.,
+[**Residual-Based Error Correction for Neural Operator Accelerated Infinite-Dimensional Bayesian Inverse Problems**](https://www.sciencedirect.com/science/article/pii/S0021999123001997).
+Journal of Computational Physics, 112104
+([Download](https://www.sciencedirect.com/science/article/pii/S0021999123001997))<details><summary>BibTeX</summary><pre>
+@article{CaoOLearyRoseberryJhaEtAl2023,
+  title={Residual-based error correction for neural operator accelerated infinite-dimensional {B}ayesian inverse problems},
+  author={Cao, Lianghao and O'Leary-Roseberry, Thomas and Jha, Prashant K and Oden, J Tinsley and Ghattas, Omar},
+  journal={Journal of Computational Physics},
+  pages={112104},
+  year={2023},
+  publisher={Elsevier}
+}
+}</pre></details>
