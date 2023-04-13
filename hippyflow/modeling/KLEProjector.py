@@ -14,10 +14,12 @@
 import dolfin as dl
 import numpy as np
 import os
-from hippylib import *
 from mpi4py import MPI 
 import time
 
+import hippylib as hp
+
+from ..collectives.collective import NullCollective
 from ..collectives.collectiveOperator import CollectiveOperator
 from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from .jacobian import *
@@ -37,7 +39,7 @@ def KLEParameterList():
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
-	return ParameterList(parameters)
+	return hp.ParameterList(parameters)
 
 class MRinvM:
 	"""
@@ -104,10 +106,10 @@ class KLEProjector:
 		"""
 		m_KLE = dl.Vector(self.mesh_constructor_comm)
 		self.prior.M.init_vector(m_KLE,0)
-		Omega = MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = hp.MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega)
+			hp.parRandom.normal(1.,Omega)
 			Omega.orthogonalize()
 		else:
 			Omega.zero()
@@ -131,22 +133,22 @@ class KLEProjector:
 
 		m_KLE = dl.Vector(self.mesh_constructor_comm)
 		KLE_Operator.init_vector(m_KLE,0)
-		Omega = MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = hp.MultiVector(m_KLE,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega)
+			hp.parRandom.normal(1.,Omega)
 		else:
 			Omega.zero()
 
 		self.collective.bcast(Omega,root = 0)
 
 		if M_orthogonal:
-			self.d_KLE, self.V_KLE = doublePassG(KLE_Operator,\
+			self.d_KLE, self.V_KLE = hp.doublePassG(KLE_Operator,\
 				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = True
 		else:
-			RsolverOperator = Solver2Operator(self.prior.Rsolver)
-			self.d_KLE, self.V_KLE = doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
+			RsolverOperator = hp.Solver2Operator(self.prior.Rsolver)
+			self.d_KLE, self.V_KLE = hp.doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = False
 
 		self._subspace_construction_time = time.time() - t0
@@ -200,15 +202,15 @@ class KLEProjector:
 		projection_vector = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(projection_vector,0)
 
-		LocalParameters = MultiVector(projection_vector,self.parameters['error_test_samples'])
+		LocalParameters = hp.MultiVector(projection_vector,self.parameters['error_test_samples'])
 		LocalParameters.zero()
 		# Generate samples
 		for i in range(self.parameters['error_test_samples']):
 			t0 = time.time()
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,LocalParameters[i])
 
-		LocalErrors = MultiVector(projection_vector,self.parameters['error_test_samples'])
+		LocalErrors = hp.MultiVector(projection_vector,self.parameters['error_test_samples'])
 		
 
 		for rank_index,rank in enumerate(ranks):
@@ -225,7 +227,7 @@ class KLEProjector:
 			if self.M_orthogonal:
 				InputProjectorOperator = PriorPreconditionedProjector(V_KLE,self.prior.M, input_init_vector_lambda)
 			else:
-				InputProjectorOperator = LowRankOperator(np.ones_like(d_KLE),V_KLE, input_init_vector_lambda)
+				InputProjectorOperator = hp.LowRankOperator(np.ones_like(d_KLE),V_KLE, input_init_vector_lambda)
 		
 			rel_errors = np.zeros(LocalErrors.nvec())
 			for i in range(LocalErrors.nvec()):
