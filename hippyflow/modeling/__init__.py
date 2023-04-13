@@ -35,7 +35,7 @@ from .multiPDEProblem import MultiPDEProblem
 
 from .observable import LinearStateObservable, DomainRestrictedOperator, hippylibModelLinearStateObservable
 
-from .operatorWrappers import npToDolfinOperator
+from .operatorWrappers import npToDolfinOperator, MeanJTJfromDataOperator
 
 from .PODProjector import PODProjector, PODParameterList
 
