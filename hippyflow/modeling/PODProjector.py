@@ -14,7 +14,7 @@
 import dolfin as dl
 import numpy as np
 import time
-from hippylib import *
+import hippylib as hp
 from mpi4py import MPI 
 import os
 
@@ -81,8 +81,8 @@ class PODProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-		self.u = self.observable.generate_vector(STATE)
-		self.m = self.observable.generate_vector(PARAMETER)
+		self.u = self.observable.generate_vector(hp.STATE)
+		self.m = self.observable.generate_vector(hp.PARAMETER)
 		if self.control_distribution is None:
 			self.z = None
 		else:
@@ -187,7 +187,7 @@ class PODProjector:
 					try:
 						self.m.zero()
 						self.noise.zero()
-						parRandom.normal(1,self.noise)
+						hp.parRandom.normal(1,self.noise)
 						self.prior.sample(self.noise,self.m)
 						if self.control_distribution is None:
 							linearization_x = [self.u,self.m,None]
@@ -234,14 +234,14 @@ class PODProjector:
 			local_ms = np.zeros((0,parameter_dimension))
 			local_qs = np.zeros((0,output_dimension))
 			if self.control_distribution is not None:
-				local_zs = np.zeros((0,control_distribution))
+				local_zs = np.zeros((0, self.control_distribution))
 
 			if check_for_data:
 				if os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
 					os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
 					local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
 					local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
-					if control_distribution is not None:
+					if self.control_distribution is not None:
 						local_zs = np.load(output_directory+'zs_on_rank_'+str(my_rank)+'.npy')
 						last_datum_generated = min(local_ms.shape[0],local_qs.shape[0],local_zs.shape[0])
 					else:
@@ -255,7 +255,7 @@ class PODProjector:
 				while not solved:
 					try:
 						print('Generating data number '+str(i))
-						parRandom.normal(1,self.noise)
+						hp.parRandom.normal(1,self.noise)
 						self.prior.sample(self.noise,self.m)
 						self.u.zero()
 						self.u.axpy(1.,self.u_at_mean)
@@ -297,8 +297,8 @@ class PODProjector:
 			os.makedirs(output_directory,exist_ok = True)
 			import scipy.sparse as sp
 
-			u_trial = dl.TrialFunction(self.observable.problem.Vh[STATE])
-			u_test = dl.TestFunction(self.observable.problem.Vh[STATE])
+			u_trial = dl.TrialFunction(self.observable.problem.Vh[hp.STATE])
+			u_test = dl.TestFunction(self.observable.problem.Vh[hp.STATE])
 			M = dl.PETScMatrix(self.mesh_constructor_comm)
 			dl.assemble(dl.inner(u_trial,u_test)*dl.dx, tensor=M)
 			
@@ -328,7 +328,7 @@ class PODProjector:
 		self.solve_at_mean()
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 
 		#Read data from file and build subspace option
@@ -336,7 +336,7 @@ class PODProjector:
 			# if self.parameters['verbose']:
 				# print('Starting observable generation for draw ',i)
 			observable_vector.zero()
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
 			if self.control_distribution is not None:
 				self.z.zero()
@@ -349,23 +349,23 @@ class PODProjector:
 			LocalObservables[i].axpy(1.,observable_vector)
 
 		init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-		LocalPODOperator = LowRankOperator(np.ones(LocalObservables.nvec())/self.parameters['sample_per_process']\
+		LocalPODOperator = hp.LowRankOperator(np.ones(LocalObservables.nvec())/self.parameters['sample_per_process']\
 																			,LocalObservables,init_vector_lambda)
 
 		GlobalPODOperator = CollectiveOperator(LocalPODOperator, self.collective,mpi_op = 'avg')
 
 		x_POD = dl.Vector(self.mesh_constructor_comm)
 		LocalPODOperator.init_vector(x_POD,dim = 0)
-		Omega_POD = MultiVector(x_POD,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega_POD = hp.MultiVector(x_POD,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega_POD)
+			hp.parRandom.normal(1.,Omega_POD)
 		else:
 			Omega_POD.zero()
 
 		self.collective.bcast(Omega_POD,root = 0)
 
-		self.d, self.U_MV = doublePass(GlobalPODOperator,Omega_POD,self.parameters['rank'],s = 1)
+		self.d, self.U_MV = hp.doublePass(GlobalPODOperator,Omega_POD,self.parameters['rank'],s = 1)
 
 		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):
@@ -405,11 +405,11 @@ class PODProjector:
 
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 		for i in range(LocalObservables.nvec()):
 			t0 = time.time()
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
 			if self.control_distribution is not None:
 				self.z.zero()
@@ -422,7 +422,7 @@ class PODProjector:
 			# if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			# 	print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
 
-		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalErrors = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 
 		projection_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(projection_vector,dim = 0)
@@ -434,7 +434,7 @@ class PODProjector:
 				U_MV = self.U_MV
 				d = self.d
 			else:
-				U_MV = MultiVector(self.U_MV[0],rank)
+				U_MV = hp.MultiVector(self.U_MV[0],rank)
 				d = self.d[0:rank]
 				for i in range(rank):
 					U_MV[i].axpy(1.,self.U_MV[i])
@@ -442,7 +442,7 @@ class PODProjector:
 					# U_MV[i].apply('')
 
 			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-			PODOperator = LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
+			PODOperator = hp.LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
 
 			rel_errors = np.zeros(LocalErrors.nvec())
 			for i in range(LocalErrors.nvec()):
@@ -480,7 +480,7 @@ class PODProjector:
 		if self.parameters['verbose']:
 			print('||m_mean|| = ',m_mean.norm('l2'))
 		m_mean_pvd = dl.File(save_states_dir+'m_mean.pvd')
-		m_mean_pvd << vector2Function(m_mean,self.observable.problem.Vh[PARAMETER])
+		m_mean_pvd << hp.vector2Function(m_mean,self.observable.problem.Vh[hp.PARAMETER])
 		u_at_mean = self.observable.problem.generate_state()
 
 		if self.control_distribution is not None:
@@ -501,17 +501,17 @@ class PODProjector:
 		if self.parameters['verbose']:
 			print('||v_at_mean|| = ',u_at_mean.norm('l2'))
 		v_at_mean_pvd = dl.File(save_states_dir+'v_at_mean.pvd')
-		v_at_mean_pvd << vector2Function(u_at_mean,self.observable.problem.Vh[STATE])
+		v_at_mean_pvd << hp.vector2Function(u_at_mean,self.observable.problem.Vh[hp.STATE])
 
 		# Sample from prior:
-		parRandom.normal(1,self.noise)
-		m_sample = self.observable.generate_vector(PARAMETER)
+		hp.parRandom.normal(1,self.noise)
+		m_sample = self.observable.generate_vector(hp.PARAMETER)
 		self.prior.sample(self.noise,m_sample)
 
 		if self.parameters['verbose']:
 			print('||m_sample|| = ',m_sample.norm('l2'))
 		m_sample_pvd = dl.File(save_states_dir+'m_sample.pvd')
-		m_sample_pvd << vector2Function(m_sample,self.observable.problem.Vh[PARAMETER])
+		m_sample_pvd << hp.vector2Function(m_sample,self.observable.problem.Vh[hp.PARAMETER])
 
 		u_at_sample = self.observable.problem.generate_state()
 		if self.control_distribution is not None:
@@ -526,7 +526,7 @@ class PODProjector:
 		if self.parameters['verbose']:
 			print('||v_at_sample|| = ',u_at_sample.norm('l2'))
 		v_at_sample_pvd = dl.File(save_states_dir+'v_at_sample.pvd')
-		v_at_sample_pvd << vector2Function(u_at_sample,self.observable.problem.Vh[STATE])
+		v_at_sample_pvd << hp.vector2Function(u_at_sample,self.observable.problem.Vh[hp.STATE])
 
 
 
@@ -549,20 +549,20 @@ class PODProjector:
 		# truncate eigenvalues for numerical stability
 
 		# Instantiate parameter vector for requisite data structures
-		LocalParameters = MultiVector(self.m,self.parameters['sample_per_process'])
+		LocalParameters = hp.MultiVector(self.m,self.parameters['sample_per_process'])
 		LocalParameters.zero()
 
-		input_projection_vector = self.observable.generate_vector(PARAMETER)
+		input_projection_vector = self.observable.generate_vector(hp.PARAMETER)
 
 		# Instantiate an observable vector for requisite data structures
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
 
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 		t0 = time.time()
 		for i in range(LocalObservables.nvec()):
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,LocalParameters[i])
 			if self.control_distribution is not None:
 				self.z.zero()
@@ -578,7 +578,7 @@ class PODProjector:
 		# LocalProjectedObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
 		# LocalProjectedObservables.zero()
 
-		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalErrors = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 
 
 		output_projection_vector = dl.Vector(self.mesh_constructor_comm)
@@ -590,22 +590,22 @@ class PODProjector:
 		global_std_rel_errors = []
 		for (rank_in,rank_out) in rank_pairs:
 			# Define input projector operator for rank_in
-			V_r = MultiVector(V_MV[0],rank_in)
+			V_r = hp.MultiVector(V_MV[0],rank_in)
 			for i in range(rank_in):
 				V_r[i].axpy(1.,V_MV[i])
 			input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
 			if Cinv is not None:
 				InputProjectorOperator = PriorPreconditionedProjector(V_r,Cinv, input_init_vector_lambda)
 			else:
-				InputProjectorOperator = LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
+				InputProjectorOperator = hp.LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
 
 			# Define output projector operator for rank_out
-			U_MV = MultiVector(self.U_MV[0],rank_out)
+			U_MV = hp.MultiVector(self.U_MV[0],rank_out)
 			for i in range(rank_out):
 				U_MV[i].axpy(1.,self.U_MV[i])
 
 			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-			PODOperator = LowRankOperator(np.ones(rank_out),U_MV,init_vector_lambda)
+			PODOperator = hp.LowRankOperator(np.ones(rank_out),U_MV,init_vector_lambda)
 
 
 			LocalErrors.zero()

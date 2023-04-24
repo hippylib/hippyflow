@@ -12,7 +12,7 @@
 # Software Foundation) version 2.0 dated June 1991.
 
 
-from hippylib import *
+import hippylib as hp 
 import dolfin as dl
 import numpy as np
        
@@ -76,18 +76,18 @@ class ObservableJacobian:
 
         self.ncalls = 0
         
-        self.rhs_fwd = observable.generate_vector(STATE)
-        self.rhs_adj = observable.generate_vector(ADJOINT)
-        self.rhs_adj2 = observable.generate_vector(ADJOINT)
-        self.uhat    = observable.generate_vector(STATE)
-        self.phat    = observable.generate_vector(ADJOINT)
-        self.yhelp = observable.generate_vector(PARAMETER)
+        self.rhs_fwd = observable.generate_vector(hp.STATE)
+        self.rhs_adj = observable.generate_vector(hp.ADJOINT)
+        self.rhs_adj2 = observable.generate_vector(hp.ADJOINT)
+        self.uhat    = observable.generate_vector(hp.STATE)
+        self.phat    = observable.generate_vector(hp.ADJOINT)
+        self.yhelp = observable.generate_vector(hp.PARAMETER)
 
 
 
         self.Bu = dl.Vector(self.mpi_comm())
         self.observable.B.init_vector(self.Bu,0)
-        self.Ctphat = observable.generate_vector(PARAMETER)
+        self.Ctphat = observable.generate_vector(hp.PARAMETER)
         self.shape = (self.Bu.get_local().shape[0],self.yhelp.get_local().shape[0])
 
     def mpi_comm(self):
