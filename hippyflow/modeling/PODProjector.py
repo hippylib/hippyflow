@@ -41,7 +41,7 @@ def PODParameterList():
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
-	return ParameterList(parameters)
+	return hp.ParameterList(parameters)
 
 
 class PODProjector:
