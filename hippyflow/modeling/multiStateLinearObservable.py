@@ -11,7 +11,7 @@
 # terms of the GNU General Public License (as published by the Free
 # Software Foundation) version 2.0 dated June 1991.
 
-from hippylib import *
+import hippylib as hp 
 import dolfin as dl
 import numpy as np
       
@@ -62,11 +62,11 @@ class MultiStateLinearObservable(Observable):
 			x = [self.problem.generate_state(),
 				 self.problem.generate_parameter(),
 				 self.problem.generate_state()]
-		elif component == STATE:
+		elif component == hp.STATE:
 			x = self.problem.generate_state()
-		elif component == PARAMETER:
+		elif component == hp.PARAMETER:
 			x = self.problem.generate_parameter()
-		elif component == ADJOINT:
+		elif component == hp.ADJOINT:
 			x = self.problem.generate_state()
 
 		return x
@@ -153,7 +153,7 @@ class MultiStateLinearObservable(Observable):
 			- simply store a copy of x and evaluate action of blocks of the Hessian on the fly
 			- or partially precompute the block of the hessian (if feasible)
 		"""
-		x[ADJOINT] = self.problem.problems[0].generate_state()
+		x[hp.ADJOINT] = self.problem.problems[0].generate_state()
 		self.problem.setLinearizationPoint(x, True)
 
 		
@@ -197,7 +197,7 @@ class MultiStateLinearObservable(Observable):
 			
 		.. note:: This routine assumes that :code:`out` has the correct shape.
 		"""
-		self.problem.apply_ij(ADJOINT,PARAMETER, dm, out)
+		self.problem.apply_ij(hp.ADJOINT,hp.PARAMETER, dm, out)
 	
 	def applyCt(self, dp, out):
 		"""
@@ -209,4 +209,4 @@ class MultiStateLinearObservable(Observable):
 			
 		..note:: This routine assumes that :code:`out` has the correct shape.
 		"""
-		self.problem.apply_ij(PARAMETER,ADJOINT, dp, out)
+		self.problem.apply_ij(hp.PARAMETER,hp.ADJOINT, dp, out)
