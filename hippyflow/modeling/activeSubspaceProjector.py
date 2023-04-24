@@ -14,7 +14,7 @@
 import dolfin as dl
 import numpy as np
 import os
-from hippylib import *
+import hippylib as hp
 from mpi4py import MPI 
 import time
 
@@ -59,7 +59,7 @@ def ActiveSubspaceParameterList():
 	parameters['save_and_plot']				= [True,'Boolean for saving data and plots (only False for unit testing)']
 	parameters['store_Omega']				= [False,'Boolean for storing Gaussian random matrix (only True for unit testing)']
 	parameters['ms_given']					= [False,'Boolean for passing ms into serialized AS construction (only True for unit testing)']
-	return ParameterList(parameters)
+	return hp.ParameterList(parameters)
 
 
 class SummedListOperator:
@@ -123,8 +123,8 @@ class SeriallySampledJacobianOperator:
 		else:
 			self.temp = dl.Vector(communicator)
 
-		self.u = self.observable.generate_vector(STATE)
-		self.m = self.observable.generate_vector(PARAMETER)
+		self.u = self.observable.generate_vector(hp.STATE)
+		self.m = self.observable.generate_vector(hp.PARAMETER)
 		if self.control_distribution is None:
 			self.z = None
 		else:
@@ -169,7 +169,7 @@ class SeriallySampledJacobianOperator:
 						# Sample from the prior
 						self.m.zero()
 						self.noise.zero()
-						parRandom.normal(1,self.noise)
+						hp.parRandom.normal(1,self.noise)
 						self.prior.sample(self.noise,self.m)
 						if self.control_distribution is None:
 							linearization_x = [self.u,self.m,None]
@@ -190,7 +190,7 @@ class SeriallySampledJacobianOperator:
 					except:
 						print('Issue with the solution, moving on')
 						pass
-				# Define action on matrix (as represented by MultiVector)
+				# Define action on matrix (as represented by hp.MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
 					t0 = time.time()
@@ -218,7 +218,7 @@ class SeriallySampledJacobianOperator:
 				# set linearization point
 				self.observable.setLinearizationPoint(linearization_x)
 				solved = True
-				# Define action on matrix (as represented by MultiVector)
+				# Define action on matrix (as represented by hp.MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
 					operator_i.mult(x[j],temp)
@@ -329,8 +329,8 @@ class ActiveSubspaceProjector:
 		This method initializes the samples from the prior used in sampling
 		"""
 		t0 = time.time()
-		self.us = [self.observable.generate_vector(STATE) for i in range(self.parameters['samples_per_process'])]
-		self.ms = [self.observable.generate_vector(PARAMETER) for i in range(self.parameters['samples_per_process'])]
+		self.us = [self.observable.generate_vector(hp.STATE) for i in range(self.parameters['samples_per_process'])]
+		self.ms = [self.observable.generate_vector(hp.PARAMETER) for i in range(self.parameters['samples_per_process'])]
 		if self.control_distribution is not None:
 			self.zs = [self.observable.generate_vector(CONTROL) for i in range(self.parameters['samples_per_process'])]
 		else:
@@ -340,7 +340,7 @@ class ActiveSubspaceProjector:
 			while not solved:
 				try:
 					self.noise.zero()
-					parRandom.normal(1,self.noise)
+					hp.parRandom.normal(1,self.noise)
 					# set linearization point
 					self.prior.sample(self.noise,m)
 					if self.control_distribution is not None:
@@ -409,10 +409,10 @@ class ActiveSubspaceProjector:
 
 		x_GN = dl.Vector(self.mesh_constructor_comm)
 		GN_Hessians[0].init_vector(x_GN)
-		Omega = MultiVector(x_GN,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = hp.MultiVector(x_GN,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega)
+			hp.parRandom.normal(1.,Omega)
 			if self.parameters['store_Omega']:
 				self.Omega_GN = Omega
 		else:
@@ -423,13 +423,13 @@ class ActiveSubspaceProjector:
 
 		if prior_preconditioned:
 			if hasattr(self.prior, "R"):
-				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
+				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
 			else:
-				self.d_GN, self.V_GN = doublePassG(Average_GN_Hessian,\
+				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 		else:
-			self.d_GN, self.V_GN = doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+			self.d_GN, self.V_GN = hp.doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
 		total_init_time = time.time() - t0
 		for i in range(100):
 			print(80*'#')
@@ -498,13 +498,13 @@ class ActiveSubspaceProjector:
 		# Instantiate Gaussian random matrix
 		x_Omega_construction = dl.Vector(self.mesh_constructor_comm)
 		Local_Average_Jacobian_Operator.init_vector(x_Omega_construction)
-		Omega = MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = hp.MultiVector(x_Omega_construction,self.parameters['rank'] + self.parameters['oversampling'])
 		Omega.zero()
 
 		if self.collective.rank() == 0:
 
 			if (operation == 'JTJ' and self.Omega_GN is None) or (operation == 'JJT' and self.Omega_NG is None):
-				parRandom.normal(1.,Omega)
+				hp.parRandom.normal(1.,Omega)
 			else:
 				if operation == 'JTJ':
 					Omega = self.Omega_GN
@@ -516,19 +516,19 @@ class ActiveSubspaceProjector:
 		if operation == 'JTJ':
 			if prior_preconditioned:
 				if hasattr(self.prior, "R"):
-					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
 				else:
-					self.d_GN, self.V_GN = doublePassG(Average_Jacobian_Operator,\
+					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
 			else:
-				self.d_GN, self.V_GN = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+				self.d_GN, self.V_GN = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
 			self.prior_preconditioned = prior_preconditioned
 			self._input_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 				print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
 		elif operation == 'JJT':
-			self.d_NG, self.U_NG = doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			self.d_NG, self.U_NG = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
 			self._output_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
@@ -580,17 +580,17 @@ class ActiveSubspaceProjector:
 
 		x_NG = dl.Vector(self.mesh_constructor_comm)
 		NG_Hessians[0].init_vector(x_NG)
-		Omega = MultiVector(x_NG,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega = hp.MultiVector(x_NG,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega)
+			hp.parRandom.normal(1.,Omega)
 			if self.parameters['store_Omega']:
 				self.Omega_NG = Omega
 		else:
 			Omega.zero()
 
 		self.collective.bcast(Omega,root = 0)
-		self.d_NG, self.U_NG = doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
+		self.d_NG, self.U_NG = hp.doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
 		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
@@ -642,14 +642,14 @@ class ActiveSubspaceProjector:
 		process_specific_directory = self.parameters['output_directory']+'data_on_proc_'+str(proc_id)+'/'
 		os.makedirs(process_specific_directory,exist_ok = True)
 		if self.u is None:
-			self.u = self.observable.generate_vector(STATE)
+			self.u = self.observable.generate_vector(hp.STATE)
 		if self.m is None:
-			self.m = self.observable.generate_vector(PARAMETER)
+			self.m = self.observable.generate_vector(hp.PARAMETER)
 		if self.control_distribution is not None and self.z is None:
 			self.z = self.observable.generate_vector(CONTROL)
 
 		if self.control_distribution is not None:
-			assert self.observable.problem.Vh[STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
+			assert self.observable.problem.Vh[hp.STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
 			control_dimension = self.z.get_local().shape[0]
 
 		if parameter_jacobian:
@@ -694,20 +694,20 @@ class ActiveSubspaceProjector:
 			parameter_vector = dl.Vector(self.mesh_constructor_comm)
 			self.J.init_vector(parameter_vector,1)
 			nvec_Omega_m = min(parameter_rank + self.parameters['oversampling'],output_dimension,parameter_dimension)
-			Omega_m = MultiVector(parameter_vector,nvec_Omega_m)
+			Omega_m = hp.MultiVector(parameter_vector,nvec_Omega_m)
 			# Omega does not need to be communicated across processes in this case
 			# like with the global reduction collectives
 			# Omega can be the same for all samples
-			parRandom.normal(1.,Omega_m)
+			hp.parRandom.normal(1.,Omega_m)
 		if control_jacobian:
 			control_vector = dl.Vector(self.mesh_constructor_comm)
 			self.Jz.init_vector(control_vector,1)
 			nvec_Omega_z = min(control_rank + self.parameters['oversampling'],output_dimension,control_dimension)
-			Omega_z = MultiVector(control_vector,nvec_Omega_z)
+			Omega_z = hp.MultiVector(control_vector,nvec_Omega_z)
 			# Omega does not need to be communicated across processes in this case
 			# like with the global reduction collectives
 			# Omega can be the same for all samples
-			parRandom.normal(1.,Omega_z)
+			hp.parRandom.normal(1.,Omega_z)
 
 		if check_for_data:
 			# Find largest mq pair generated
@@ -718,7 +718,7 @@ class ActiveSubspaceProjector:
 		t0 = time.time()
 		for i in range(last_datum_generated,self.parameters['jacobian_data_per_process']):
 			print(('Generating data number '+str(i)).center(80))
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.m.zero() # This is probably redundant
 			self.prior.sample(self.noise,self.m)
 			if self.control_distribution is not None:
@@ -738,8 +738,8 @@ class ActiveSubspaceProjector:
 
 			if parameter_jacobian:
 				Omega_m.zero() # probably unecessary
-				parRandom.normal(1.,Omega_m)
-				U, sigma, V = accuracyEnhancedSVD(self.J,Omega_m,parameter_rank,s=1)
+				hp.parRandom.normal(1.,Omega_m)
+				U, sigma, V = hp.accuracyEnhancedSVD(self.J,Omega_m,parameter_rank,s=1)
 				Unp = mv_to_dense(U)
 				Vnp = mv_to_dense(V)
 
@@ -749,9 +749,9 @@ class ActiveSubspaceProjector:
 
 			if control_jacobian:
 				Omega_z.zero() # probably unecessary
-				parRandom.normal(1.,Omega_z)
+				hp.parRandom.normal(1.,Omega_z)
 
-				Uz, sigmaz, Vz = accuracyEnhancedSVD(self.Jz,Omega_z,control_rank,s=1)
+				Uz, sigmaz, Vz = hp.accuracyEnhancedSVD(self.Jz,Omega_z,control_rank,s=1)
 				Uznp = mv_to_dense(Uz)
 				Vznp = mv_to_dense(Vz)
 
@@ -851,7 +851,7 @@ class ActiveSubspaceProjector:
 		last_datum_generated = 0
 		output_dimension,parameter_dimension = self.Js[0].shape
 		if self.control_distribution is not None:
-			assert self.observable.problem.Vh[STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
+			assert self.observable.problem.Vh[hp.STATE].mesh().mpi_comm().size == 1, print('Only worked out for serial codes')
 			control_dimension = self.z.get_local().shape[0]
 
 		rank = min(self.parameters['rank'],output_dimension,parameter_dimension)
@@ -930,10 +930,10 @@ class ActiveSubspaceProjector:
 		# Initialize randomized Omega
 		parameter_vector = dl.Vector(self.mesh_constructor_comm)
 		self.Js[0].init_vector(parameter_vector,1)
-		Omega = MultiVector(parameter_vector,rank + self.parameters['oversampling'])
+		Omega = hp.MultiVector(parameter_vector,rank + self.parameters['oversampling'])
 		# Omega does not need to be communicated across processes in this case
 		# like with the global reduction collectives
-		parRandom.normal(1.,Omega)
+		hp.parRandom.normal(1.,Omega)
 
 		t0 = time.time()
 		# I think this is all hard coded for a single serial mesh, check if 
@@ -949,7 +949,7 @@ class ActiveSubspaceProjector:
 			# Reusing Omega for each randomized pass, this shouldn't be an issue,
 			# but one could resample at each iteration
 
-			U, sigma, V = accuracyEnhancedSVD(self.Js[i],Omega,rank,s=1)
+			U, sigma, V = hp.accuracyEnhancedSVD(self.Js[i],Omega,rank,s=1)
 
 			local_Us = np.concatenate((local_Us,np.expand_dims(mv_to_dense(U),0)))
 			local_sigmas = np.concatenate((local_sigmas,np.expand_dims(sigma,0)))
@@ -1004,16 +1004,16 @@ class ActiveSubspaceProjector:
 			global_std_rel_errors_input = np.zeros_like(ranks,dtype = np.float64)
 
 			# Naive test on output space
-			LocalParameters = MultiVector(self.ms[0],self.parameters['error_test_samples'])
+			LocalParameters = hp.MultiVector(self.ms[0],self.parameters['error_test_samples'])
 			LocalParameters.zero()
 			# Generate samples
 			for i in range(self.parameters['error_test_samples']):
 				t0 = time.time()
-				parRandom.normal(1,self.noise)
+				hp.parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,LocalParameters[i])
 
-			LocalErrors = MultiVector(self.ms[0],self.parameters['error_test_samples'])
-			projection_vector = self.observable.generate_vector(PARAMETER) 
+			LocalErrors = hp.MultiVector(self.ms[0],self.parameters['error_test_samples'])
+			projection_vector = self.observable.generate_vector(hp.PARAMETER) 
 
 			for rank_index,rank in enumerate(ranks):
 				LocalErrors.zero()
@@ -1021,7 +1021,7 @@ class ActiveSubspaceProjector:
 					V_GN = self.V_GN
 					d_GN = self.d_GN
 				else:
-					V_GN = MultiVector(self.V_GN[0],rank)
+					V_GN = hp.MultiVector(self.V_GN[0],rank)
 					d_GN = self.d_GN[0:rank]
 					for i in range(rank):
 						V_GN[i].axpy(1.,self.V_GN[i])
@@ -1029,7 +1029,7 @@ class ActiveSubspaceProjector:
 				if self.prior_preconditioned:
 					InputProjectorOperator = PriorPreconditionedProjector(V_GN,self.prior.R, input_init_vector_lambda)
 				else:
-					InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
+					InputProjectorOperator = hp.LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
 			
 				rel_errors = np.zeros(LocalErrors.nvec())
 				for i in range(LocalErrors.nvec()):
@@ -1049,7 +1049,7 @@ class ActiveSubspaceProjector:
 					print('Naive global average relative error input = ',global_avg_rel_errors_input[rank_index],' for rank ',rank)
 
 			# Double Loop MC Error test does not work when prior preconditioning is used.
-			# This will be fixed soon. Or someday.
+			# This will be fixed soon. Or someday. Someday soon! :+)
 			if False:
 				if self.d_GN is None:
 					if self.mesh_constructor_comm.rank == 0:
@@ -1076,21 +1076,21 @@ class ActiveSubspaceProjector:
 				# Instantiate input and output data arrays
 				observable_vector = dl.Vector(self.mesh_constructor_comm)
 				self.observable.init_vector(observable_vector,dim = 0)
-				LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
+				LocalObservables = hp.MultiVector(observable_vector,self.parameters['error_test_samples'])
 				LocalObservables.zero()
-				LocalParameters = MultiVector(self.ms[0],self.parameters['error_test_samples'])
+				LocalParameters = hp.MultiVector(self.ms[0],self.parameters['error_test_samples'])
 				LocalParameters.zero()
 				# Generate samples
 				for i in range(self.parameters['error_test_samples']):
 					t0 = time.time()
-					parRandom.normal(1,self.noise)
+					hp.parRandom.normal(1,self.noise)
 					self.prior.sample(self.noise,LocalParameters[i])
 					LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i],setLinearizationPoint = True))
 					if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 						print('Generating local observable ',i,' for input error test took',time.time() -t0, 's')
 
 				# Instantiate array for errors
-				LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
+				LocalErrors = hp.MultiVector(observable_vector,self.parameters['error_test_samples'])
 
 				m_r = dl.Vector(self.mesh_constructor_comm)
 				self.observable.init_vector(m_r,dim = 1)
@@ -1108,7 +1108,7 @@ class ActiveSubspaceProjector:
 						V_GN = self.V_GN
 						d_GN = self.d_GN
 					else:
-						V_GN = MultiVector(self.V_GN[0],rank)
+						V_GN = hp.MultiVector(self.V_GN[0],rank)
 						V_GN.zero()
 						d_GN = self.d_GN[0:rank]
 						for i in range(rank):
@@ -1117,7 +1117,7 @@ class ActiveSubspaceProjector:
 					if self.prior_preconditioned:
 						InputProjectorOperator = PriorPreconditionedProjector(V_GN,self.prior.R, input_init_vector_lambda)
 					else:
-						InputProjectorOperator = LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
+						InputProjectorOperator = hp.LowRankOperator(np.ones_like(d_GN),V_GN, input_init_vector_lambda)
 					print('Constructed projection operator for rank ',rank)
 					rel_errors = np.zeros(LocalErrors.nvec())
 
@@ -1134,7 +1134,7 @@ class ActiveSubspaceProjector:
 							t0 = time.time()
 							y.zero()
 							y_r.zero()
-							parRandom.normal(1,self.noise)
+							hp.parRandom.normal(1,self.noise)
 							self.prior.sample(self.noise,y)
 							InputProjectorOperator.mult(y,y_r)
 							y.axpy(-1., y_r)
@@ -1192,11 +1192,11 @@ class ActiveSubspaceProjector:
 			# Naive test on output space
 			observable_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(observable_vector,dim = 0)
-			LocalObservables = MultiVector(observable_vector,self.parameters['error_test_samples'])
+			LocalObservables = hp.MultiVector(observable_vector,self.parameters['error_test_samples'])
 			LocalObservables.zero()
 			for i in range(LocalObservables.nvec()):
 				t0 = time.time()
-				parRandom.normal(1,self.noise)
+				hp.parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,self.ms[0])
 				if self.control_distribution is not None:
 					assert self.zs is not None
@@ -1215,7 +1215,7 @@ class ActiveSubspaceProjector:
 				if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 					print('Generating local observable ',i, ' for output error test')
 
-			LocalErrors = MultiVector(observable_vector,self.parameters['error_test_samples'])
+			LocalErrors = hp.MultiVector(observable_vector,self.parameters['error_test_samples'])
 			projection_vector = dl.Vector(self.mesh_constructor_comm)
 			self.observable.init_vector(projection_vector,dim = 0)
 
@@ -1225,12 +1225,12 @@ class ActiveSubspaceProjector:
 					U_NG = self.U_NG
 					d_NG = self.d_NG
 				else:
-					U_NG = MultiVector(self.U_NG[0],rank)
+					U_NG = hp.MultiVector(self.U_NG[0],rank)
 					d_NG = self.d_NG[0:rank]
 					for i in range(rank):
 						U_NG[i].axpy(1.,self.U_NG[i])
 				output_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-				OutputProjectorOperator = LowRankOperator(np.ones_like(d_NG),U_NG,output_init_vector_lambda)
+				OutputProjectorOperator = hp.LowRankOperator(np.ones_like(d_NG),U_NG,output_init_vector_lambda)
 			
 				rel_errors = np.zeros(LocalErrors.nvec())
 				for i in range(LocalErrors.nvec()):
