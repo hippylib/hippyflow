@@ -206,6 +206,8 @@ class PODProjector:
 						if self.control_distribution is not None:
 							this_z = self.z.get_local()
 							np.save(rank_specific_directory+'z_sample_'+str(i)+'.npy',this_z)
+
+						solved = True
 					except:
 						print('Issue with the forward solution, moving on.')
 
