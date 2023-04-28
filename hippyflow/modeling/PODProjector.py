@@ -282,6 +282,7 @@ class PODProjector:
 							this_z = self.z.get_local()
 							local_zs = np.concatenate((local_zs,np.expand_dims(this_z,0)))
 							np.save(output_directory+'zs_on_rank_'+str(my_rank)+'.npy',np.array(local_zs))
+						solved = True
 
 					except:
 						print('Issue with nonlinear solve, moving on')
