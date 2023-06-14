@@ -663,7 +663,7 @@ class ActiveSubspaceProjector:
 		if control_jacobian:
 			self.Jz = ObservableControlJacobian(self.observable)
 			output_dimension,control_dimension = self.Jz.shape
-			control_rank = min(self.parameters['jacobian_rank'],output_dimension,control_dimension)
+			control_rank = min(self.parameters['control_jacobian_rank'],output_dimension,control_dimension)
 
 
 		last_datum_generated = 0

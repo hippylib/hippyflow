@@ -121,7 +121,7 @@ class LinearStateObservable:
 			x = self.problem.generate_parameter()
 		elif component == hp.ADJOINT:
 			x = self.problem.generate_state()
-		elif component == 3:
+		elif component == CONTROL:
 			assert self.is_control_problem, 'Assuming it is a control problem'
 			# 3 denotes a control variable needs to be generated
 			x = self.problem.generate_control()
