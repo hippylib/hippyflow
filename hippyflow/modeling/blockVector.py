@@ -15,7 +15,7 @@
 
 
 import dolfin as dl
-from hippylib import *
+import hippylib as hp 
 
 class BlockVector(object):
     """
@@ -58,7 +58,7 @@ class BlockVector(object):
         to each of the snapshots.
         """
         for d in self.data:
-            parRandom.normal_perturb(std_dev, d)
+            hp.parRandom.normal_perturb(std_dev, d)
 
     
     def axpy(self, a, other):
@@ -92,5 +92,5 @@ class BlockVector(object):
     
     def export(self,Vh, fid, xname):
         for xi in self.data:
-            xfun = vector2Function(xi,Vh, name=xname)
+            xfun = hp.vector2Function(xi,Vh, name=xname)
             fid << xfun

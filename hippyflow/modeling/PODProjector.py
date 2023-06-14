@@ -14,7 +14,7 @@
 import dolfin as dl
 import numpy as np
 import time
-from hippylib import *
+import hippylib as hp
 from mpi4py import MPI 
 import os
 
@@ -23,6 +23,8 @@ from ..collectives.comm_utils import checkMeshConsistentPartitioning
 from ..utilities.mv_utilities import mv_to_dense
 from ..utilities.plotting import *
 from .priorPreconditionedProjector import PriorPreconditionedProjector
+
+CONTROL = 3
 
 
 def PODParameterList():
@@ -39,14 +41,14 @@ def PODParameterList():
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
-	return ParameterList(parameters)
+	return hp.ParameterList(parameters)
 
 
 class PODProjector:
 	"""
 	Projector class based on proper orthogonal decomposition
 	"""
-	def __init__(self,observable, prior, mesh_constructor_comm = None ,collective = None, parameters = PODParameterList()):
+	def __init__(self,observable, prior, control_distribution = None, mesh_constructor_comm = None ,collective = None, parameters = PODParameterList()):
 		"""
 		Constructor
 			- :code:`observable` - object that implements the observable mapping :math:`m -> q(m)`
@@ -57,6 +59,8 @@ class PODProjector:
 		"""
 		self.observable = observable
 		self.prior = prior
+		self.control_distribution = control_distribution
+
 		if mesh_constructor_comm is not None:
 			self.mesh_constructor_comm = mesh_constructor_comm
 		else:
@@ -77,8 +81,12 @@ class PODProjector:
 		self.noise = dl.Vector(self.mesh_constructor_comm)
 		self.prior.init_vector(self.noise,"noise")
 
-		self.u = self.observable.generate_vector(STATE)
-		self.m = self.observable.generate_vector(PARAMETER)
+		self.u = self.observable.generate_vector(hp.STATE)
+		self.m = self.observable.generate_vector(hp.PARAMETER)
+		if self.control_distribution is None:
+			self.z = None
+		else:
+			self.z = self.observable.generate_vector(CONTROL)
 
 
 		self.d = None
@@ -90,15 +98,20 @@ class PODProjector:
 		"""
 		Solve the PDE at the mean
 		"""
-		try:
-			m_mean = self.prior.mean
-			self.u_at_mean = self.observable.problem.generate_state()
+		m_mean = self.prior.mean
+		self.u_at_mean = self.observable.problem.generate_state()
+		if self.control_distribution is not None:
+			if hasattr(self.control_distribution,'mean'):
+				z_mean = self.control_distribution.mean
+			else:
+				z_mean = self.observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_mean)
+			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None,z_mean])
+		else:
 			self.observable.problem.solveFwd(self.u_at_mean,[self.u_at_mean,m_mean,None])
-		except:
-			self.u_at_mean = None
 
-	def generate_training_data(self,output_directory = 'data/',check_for_data = True,sequential = True,\
-																			compress_files = True):
+	def generate_training_data(self,check_for_data = True,sequential = True,\
+										compress_files = True):
 		"""
 		This method generates training data
 			- :code:`output_directory` - a string specifying the path to the directory where data
@@ -108,106 +121,206 @@ class PODProjector:
 		"""
 		self.solve_at_mean()
 		my_rank = int(self.collective.rank())
-		try:
-			os.makedirs(output_directory)
-		except:
-			pass
+		output_directory = self.parameters['output_directory']
+
+		os.makedirs(output_directory,exist_ok = True)
+
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
 		last_datum_generated = 0
-		m_shape = self.m.get_local().shape[0]
-		q_shape = observable_vector.get_local().shape[0]
-		print('m_shape = ',m_shape)
-		print('q_shape = ',q_shape)
+		parameter_dimension = self.m.get_local().shape[0]
+		output_dimension = observable_vector.get_local().shape[0]
+		print('dM = ',parameter_dimension)
+		print('dQ = ',output_dimension)
+		if self.control_distribution is not None:
+			control_dimension = self.z.get_local().shape[0]
+			print('dZ = ',control_dimension)
+		
 		if sequential:
 			rank_specific_directory = output_directory+'data_on_rank_'+str(my_rank)+'/'
 			os.makedirs(rank_specific_directory,exist_ok = True)
 			if check_for_data:
-				if os.path.isfile(rank_specific_directory+'ms_sample_'+str(my_rank)+'.npy') and \
-					os.path.isfile(rank_specific_directory+'qs_sample_'+str(my_rank)+'.npy'):
-					ms_generated = os.listdir(rank_specific_directory)
-					qs_generated = os.listdir(rank_specific_directory)
-					m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
-					last_m = max(m_indices)
-					q_indices = [int(m_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
-					last_q = max(q_indices)
-					last_datum_generated = min(last_m,last_q)
+				if self.control_distribution is not None:
+					if os.path.isfile(rank_specific_directory+'m_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'q_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'z_sample_0.npy'):
+						all_files = os.listdir(rank_specific_directory)
+						ms_generated = []
+						qs_generated = []
+						zs_generated = []
+						for file in all_files:
+							if 'm_' in file:
+								ms_generated.append(file)
+							elif 'q_' in file:
+								qs_generated.append(file)
+							elif 'z_' in file:
+								zs_generated.append(file)
+						m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+						last_m = max(m_indices)
+						q_indices = [int(q_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+						last_q = max(q_indices)
+						z_indices = [int(z_.split('z_sample_')[-1].split('.npy')[0]) for z_ in zs_generated]
+						last_z = max(z_indices)
+						last_datum_generated = min(last_m,last_q,last_z)
+				else:
+					if os.path.isfile(rank_specific_directory+'m_sample_0.npy') and \
+						os.path.isfile(rank_specific_directory+'q_sample_0.npy'):
+						all_files = os.listdir(rank_specific_directory)
+						ms_generated = []
+						qs_generated = []
+						for file in all_files:
+							if 'm_' in file:
+								ms_generated.append(file)
+							elif 'q_' in file:
+								qs_generated.append(file)
+						m_indices = [int(m_.split('m_sample_')[-1].split('.npy')[0]) for m_ in ms_generated]
+						last_m = max(m_indices)
+						q_indices = [int(q_.split('q_sample_')[-1].split('.npy')[0]) for q_ in qs_generated]
+						last_q = max(q_indices)
+						last_datum_generated = min(last_m,last_q)
 
 			t0 = time.time()
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
 				print('Generating data number '+str(i))
-				converged = False
-				while not converged:
-					parRandom.normal(1,self.noise)
-					self.prior.sample(self.noise,self.m)
-					self.u.zero()
-					if self.u_at_mean is not None:
-						self.u.axpy(1.,self.u_at_mean)
+				solved = False
+				while not solved:
 					try:
-						this_q = self.observable.eval(self.m).get_local()
+						self.m.zero()
+						self.noise.zero()
+						hp.parRandom.normal(1,self.noise)
+						self.prior.sample(self.noise,self.m)
+						if self.control_distribution is None:
+							linearization_x = [self.u,self.m,None]
+						else:
+							self.z.zero()
+							self.control_distribution.sample(self.z)
+							linearization_x = [self.u,self.m,None,self.z]
+
+						self.observable.solveFwd(self.u,linearization_x)
 						this_m = self.m.get_local()
+						this_q = self.observable.evalu(self.u).get_local()
+						
 						np.save(rank_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
 						np.save(rank_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
-						converged = True
-						# If there is an issue with the solve move on
+
+						if self.control_distribution is not None:
+							this_z = self.z.get_local()
+							np.save(rank_specific_directory+'z_sample_'+str(i)+'.npy',this_z)
+
+						solved = True
 					except:
-						print('Issue with the nonlinear solve, moving on')
-						pass
-					
-				if self.parameters['verbose']:
-					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+						print('Issue with the forward solution, moving on.')
+
+					if self.parameters['verbose']:
+						print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
+
 			self._data_generation_time = time.time() - t0
 			if compress_files:
-				local_ms = np.zeros((self.parameters['data_per_process'],m_shape))
-				local_qs = np.zeros((self.parameters['data_per_process'],q_shape))
+				local_ms = np.zeros((self.parameters['data_per_process'],parameter_dimension))
+				local_qs = np.zeros((self.parameters['data_per_process'],output_dimension))
+				if self.control_distribution is not None:
+					local_zs = np.zeros((self.parameters['data_per_process'],control_dimension))
 				for i in range(0,self.parameters['data_per_process']):
 					local_ms[i] = np.load(rank_specific_directory+'m_sample_'+str(i)+'.npy')
 					local_qs[i] = np.load(rank_specific_directory+'q_sample_'+str(i)+'.npy')
-				np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
+					if self.control_distribution is not None:
+						local_zs[i] = np.load(rank_specific_directory+'z_sample_'+str(i)+'.npy')
+				if self.control_distribution is not None:
+					np.savez_compressed(output_directory+'mqz_on_rank'+str(my_rank)+'.npz',m_data = local_ms,\
+										q_data = local_qs, z_data = local_zs)
+				else:
+					np.savez_compressed(output_directory+'mq_on_rank'+str(my_rank)+'.npz',m_data = local_ms,q_data = local_qs)
 
 		else:
 
-			local_ms = np.zeros((0,m_shape))
-			local_qs = np.zeros((0,q_shape))
+			local_ms = np.zeros((0,parameter_dimension))
+			local_qs = np.zeros((0,output_dimension))
+			if self.control_distribution is not None:
+				local_zs = np.zeros((0, self.control_distribution))
+
 			if check_for_data:
 				if os.path.isfile(output_directory+'ms_on_rank_'+str(my_rank)+'.npy') and \
 					os.path.isfile(output_directory+'qs_on_rank_'+str(my_rank)+'.npy'):
 					local_ms = np.load(output_directory+'ms_on_rank_'+str(my_rank)+'.npy')
 					local_qs = np.load(output_directory+'qs_on_rank_'+str(my_rank)+'.npy')
-					last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
+					if self.control_distribution is not None:
+						local_zs = np.load(output_directory+'zs_on_rank_'+str(my_rank)+'.npy')
+						last_datum_generated = min(local_ms.shape[0],local_qs.shape[0],local_zs.shape[0])
+					else:
+						last_datum_generated = min(local_ms.shape[0],local_qs.shape[0])
 
 			t0 = time.time()
 			# I think this is all hard coded for a single serial mesh, check if 
 			# the arrays need to be communicated to mesh rank 0 before being saved
 			for i in range(last_datum_generated,self.parameters['data_per_process']):
-				print('Generating data number '+str(i))
-				parRandom.normal(1,self.noise)
-				self.prior.sample(self.noise,self.m)
-				
-				self.u.zero()
-				self.u.axpy(1.,self.u_at_mean)
-				x = [self.u,self.m,None]
-				self.observable.setLinearizationPoint(x)
-				solution = self.observable.eval(self.m).get_local()
-				# If there is an issue with the solve move on
-				# local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-				# local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-				# np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-				# np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-				try:
-					solution = self.observable.eval(self.m).get_local()
-					# If there is an issue with the solve move on
-					local_qs = np.concatenate((local_qs,np.expand_dims(solution,0)))
-					local_ms = np.concatenate((local_ms,np.expand_dims(self.m.get_local(),0)))
-					np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
-					np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
-				except:
-					print('Issue with the nonlinear solve, moving on')
-					pass
-				
+				solved = False
+				while not solved:
+					try:
+						print('Generating data number '+str(i))
+						hp.parRandom.normal(1,self.noise)
+						self.prior.sample(self.noise,self.m)
+						self.u.zero()
+						self.u.axpy(1.,self.u_at_mean)
+
+
+						if self.control_distribution is not None:
+							self.z.zero()
+							self.control_distribution.sample(self.z)
+							linearization_x = [self.u,self.m,None,self.z]
+						else:
+							linearization_x = [self.u,self.m,None]
+
+
+						self.observable.solveFwd(self.u,linearization_x)
+						this_m = self.m.get_local()
+						this_q = self.observable.evalu(self.u).get_local()
+						local_qs = np.concatenate((local_qs,np.expand_dims(this_q,0)))
+						local_ms = np.concatenate((local_ms,np.expand_dims(this_m,0)))
+						np.save(output_directory+'ms_on_rank_'+str(my_rank)+'.npy',np.array(local_ms))
+						np.save(output_directory+'qs_on_rank_'+str(my_rank)+'.npy',np.array(local_qs))
+						if self.control_distribution is not None:
+							this_z = self.z.get_local()
+							local_zs = np.concatenate((local_zs,np.expand_dims(this_z,0)))
+							np.save(output_directory+'zs_on_rank_'+str(my_rank)+'.npy',np.array(local_zs))
+						solved = True
+
+					except:
+						print('Issue with nonlinear solve, moving on')
 				if self.parameters['verbose']:
 					print('On datum generated every ',(time.time() -t0)/(i - last_datum_generated+1),' s, on average.')
 			self._data_generation_time = time.time() - t0
+
+	def save_mass_and_stiffness_matrices(self):
+		"""
+		This method saves mass and stiffness matrices 
+		"""
+		if MPI.COMM_WORLD.rank == 0:
+			# Save mass matrix
+			output_directory = self.parameters['output_directory']
+			os.makedirs(output_directory,exist_ok = True)
+			import scipy.sparse as sp
+
+			u_trial = dl.TrialFunction(self.observable.problem.Vh[hp.STATE])
+			u_test = dl.TestFunction(self.observable.problem.Vh[hp.STATE])
+			M = dl.PETScMatrix(self.mesh_constructor_comm)
+			dl.assemble(dl.inner(u_trial,u_test)*dl.dx, tensor=M)
+			
+			# from scipy.sparse import csc_matrix, csr_matrix, save_npz
+			# from scipy.sparse import linalg as spla
+
+			M_mat = dl.as_backend_type(M).mat()
+			row,col,val = M_mat.getValuesCSR()
+			M_csr = sp.csr_matrix((val,col,row)) 
+			sp.save_npz(output_directory+'mass_csr',M_csr)
+
+			# Save stiffness matrix
+			K = dl.PETScMatrix(self.mesh_constructor_comm)
+			dl.assemble(dl.inner(dl.grad(u_trial),dl.grad(u_test))*dl.dx, tensor=K)
+			K_mat = dl.as_backend_type(K).mat()
+			row,col,val = K_mat.getValuesCSR()
+			K_csr = sp.csr_matrix((val,col,row)) 
+			sp.save_npz(output_directory+'stiffness_csr',K_csr)
+
 
 
 	def construct_subspace(self):
@@ -218,7 +331,7 @@ class PODProjector:
 		self.solve_at_mean()
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 
 		#Read data from file and build subspace option
@@ -226,32 +339,36 @@ class PODProjector:
 			# if self.parameters['verbose']:
 				# print('Starting observable generation for draw ',i)
 			observable_vector.zero()
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
-			x = [self.u,self.m,None]
-			self.observable.setLinearizationPoint(x)
-			observable_vector.axpy(1.,self.observable.eval(self.m))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
+			self.observable.solveFwd(self.u,x)
+			observable_vector.axpy(1.,self.observable.evalu(self.u))
 			LocalObservables[i].axpy(1.,observable_vector)
 
 		init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-
-		LocalPODOperator = LowRankOperator(np.ones(LocalObservables.nvec())/self.parameters['sample_per_process']\
+		LocalPODOperator = hp.LowRankOperator(np.ones(LocalObservables.nvec())/self.parameters['sample_per_process']\
 																			,LocalObservables,init_vector_lambda)
 
 		GlobalPODOperator = CollectiveOperator(LocalPODOperator, self.collective,mpi_op = 'avg')
 
 		x_POD = dl.Vector(self.mesh_constructor_comm)
 		LocalPODOperator.init_vector(x_POD,dim = 0)
-		Omega_POD = MultiVector(x_POD,self.parameters['rank'] + self.parameters['oversampling'])
+		Omega_POD = hp.MultiVector(x_POD,self.parameters['rank'] + self.parameters['oversampling'])
 
 		if self.collective.rank() == 0:
-			parRandom.normal(1.,Omega_POD)
+			hp.parRandom.normal(1.,Omega_POD)
 		else:
 			Omega_POD.zero()
 
 		self.collective.bcast(Omega_POD,root = 0)
 
-		self.d, self.U_MV = doublePass(GlobalPODOperator,Omega_POD,self.parameters['rank'],s = 1)
+		self.d, self.U_MV = hp.doublePass(GlobalPODOperator,Omega_POD,self.parameters['rank'],s = 1)
 
 		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):
@@ -273,6 +390,7 @@ class PODProjector:
 			- :code:`ranks` - a python list of integers specifying ranks for projection tests
 			- :code:`cut_off` - where to truncate the ranks based on the spectral decay of the POD operator
 		"""
+		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		ranks.sort()
 		if (self.d is None) or (self.U_MV is None):
 			if self.mesh_constructor_comm.rank == 0:
@@ -290,19 +408,24 @@ class PODProjector:
 
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 		for i in range(LocalObservables.nvec()):
 			t0 = time.time()
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,self.m)
-			x = [self.u,self.m,None]
-			self.observable.setLinearizationPoint(x)
-			LocalObservables[i].axpy(1.,self.observable.eval(self.m))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
+			self.observable.solveFwd(self.u,x)
+			LocalObservables[i].axpy(1.,self.observable.evalu(self.u))
 			# if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			# 	print('Generating local observable ',i,' for POD error test took',time.time() -t0, 's')
 
-		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalErrors = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 
 		projection_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(projection_vector,dim = 0)
@@ -314,7 +437,7 @@ class PODProjector:
 				U_MV = self.U_MV
 				d = self.d
 			else:
-				U_MV = MultiVector(self.U_MV[0],rank)
+				U_MV = hp.MultiVector(self.U_MV[0],rank)
 				d = self.d[0:rank]
 				for i in range(rank):
 					U_MV[i].axpy(1.,self.U_MV[i])
@@ -322,7 +445,7 @@ class PODProjector:
 					# U_MV[i].apply('')
 
 			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-			PODOperator = LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
+			PODOperator = hp.LowRankOperator(np.ones_like(d),U_MV,init_vector_lambda)
 
 			rel_errors = np.zeros(LocalErrors.nvec())
 			for i in range(LocalErrors.nvec()):
@@ -360,33 +483,53 @@ class PODProjector:
 		if self.parameters['verbose']:
 			print('||m_mean|| = ',m_mean.norm('l2'))
 		m_mean_pvd = dl.File(save_states_dir+'m_mean.pvd')
-		m_mean_pvd << vector2Function(m_mean,self.observable.problem.Vh[PARAMETER])
-
+		m_mean_pvd << hp.vector2Function(m_mean,self.observable.problem.Vh[hp.PARAMETER])
 		u_at_mean = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(u_at_mean,[u_at_mean,m_mean,None])
+
+		if self.control_distribution is not None:
+			if hasattr(self.control_distribution,'mean'):
+				z_mean = self.control_distribution.mean
+			else:
+				print('Substituting a sample of z for z_mean, since ')
+				print('control_distribution did not have a mean attribute.')
+				z_mean = self.observable.generate_vector(CONTROL)
+				self.control_distribution.sample(z_mean)
+
+			linearization_x = [u_at_mean,m_mean,None,z_mean]
+		else:
+			linearization_x = [u_at_mean,m_mean,None]
+
+		self.observable.problem.solveFwd(u_at_mean,linearization_x)
 
 		if self.parameters['verbose']:
 			print('||v_at_mean|| = ',u_at_mean.norm('l2'))
 		v_at_mean_pvd = dl.File(save_states_dir+'v_at_mean.pvd')
-		v_at_mean_pvd << vector2Function(u_at_mean,self.observable.problem.Vh[STATE])
+		v_at_mean_pvd << hp.vector2Function(u_at_mean,self.observable.problem.Vh[hp.STATE])
 
 		# Sample from prior:
-		parRandom.normal(1,self.noise)
-		m_sample = self.observable.generate_vector(PARAMETER)
+		hp.parRandom.normal(1,self.noise)
+		m_sample = self.observable.generate_vector(hp.PARAMETER)
 		self.prior.sample(self.noise,m_sample)
 
 		if self.parameters['verbose']:
 			print('||m_sample|| = ',m_sample.norm('l2'))
 		m_sample_pvd = dl.File(save_states_dir+'m_sample.pvd')
-		m_sample_pvd << vector2Function(m_sample,self.observable.problem.Vh[PARAMETER])
+		m_sample_pvd << hp.vector2Function(m_sample,self.observable.problem.Vh[hp.PARAMETER])
 
 		u_at_sample = self.observable.problem.generate_state()
-		self.observable.problem.solveFwd(u_at_sample,[u_at_sample,m_sample,None])
+		if self.control_distribution is not None:
+			z_sample = self.observable.generate_vector(CONTROL)
+			self.control_distribution.sample(z_sample)
+			linearization_x = [u_at_mean,m_mean,None,z_sample]
+		else:
+			linearization_x = [u_at_mean,m_mean,None]
+
+		self.observable.problem.solveFwd(u_at_sample,linearization_x)
 
 		if self.parameters['verbose']:
 			print('||v_at_sample|| = ',u_at_sample.norm('l2'))
 		v_at_sample_pvd = dl.File(save_states_dir+'v_at_sample.pvd')
-		v_at_sample_pvd << vector2Function(u_at_sample,self.observable.problem.Vh[STATE])
+		v_at_sample_pvd << hp.vector2Function(u_at_sample,self.observable.problem.Vh[hp.STATE])
 
 
 
@@ -399,6 +542,7 @@ class PODProjector:
 			- :code:`rank_pairs` - a python list of 2-tuples of ints specifying the input and output ranks 
 				to be used in the projection error test.
 		"""
+		assert self.control_distribution is None, 'Not worked out yet for control problems'
 		for (rank_in,rank_out) in rank_pairs:
 			assert rank_in <=V_MV.nvec()
 			assert rank_out <= self.U_MV.nvec()
@@ -408,31 +552,36 @@ class PODProjector:
 		# truncate eigenvalues for numerical stability
 
 		# Instantiate parameter vector for requisite data structures
-		LocalParameters = MultiVector(self.m,self.parameters['sample_per_process'])
+		LocalParameters = hp.MultiVector(self.m,self.parameters['sample_per_process'])
 		LocalParameters.zero()
 
-		input_projection_vector = self.observable.generate_vector(PARAMETER)
+		input_projection_vector = self.observable.generate_vector(hp.PARAMETER)
 
 		# Instantiate an observable vector for requisite data structures
 		observable_vector = dl.Vector(self.mesh_constructor_comm)
 		self.observable.init_vector(observable_vector,dim = 0)
 
-		LocalObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalObservables = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 		LocalObservables.zero()
 		t0 = time.time()
 		for i in range(LocalObservables.nvec()):
-			parRandom.normal(1,self.noise)
+			hp.parRandom.normal(1,self.noise)
 			self.prior.sample(self.noise,LocalParameters[i])
-			x = [self.u,LocalParameters[i],None]
-			self.observable.setLinearizationPoint(x)
-			LocalObservables[i].axpy(1.,self.observable.eval(LocalParameters[i]))
+			if self.control_distribution is not None:
+				self.z.zero()
+				self.control_distribution.sample(self.z)
+				linearization_x = [self.u,LocalParameters[i],None,self.z]
+			else:
+				linearization_x = [self.u,LocalParameters[i],None]
+			self.observable.solveFwd(self.u,linearization_x)
+			LocalObservables[i].axpy(1.,self.observable.evalu(self.u))
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):
 			print('Generating ',LocalObservables.nvec(),' local parameters and observables for POD error test took',time.time() -t0, 's')
 
 		# LocalProjectedObservables = MultiVector(observable_vector,self.parameters['sample_per_process'])
 		# LocalProjectedObservables.zero()
 
-		LocalErrors = MultiVector(observable_vector,self.parameters['sample_per_process'])
+		LocalErrors = hp.MultiVector(observable_vector,self.parameters['sample_per_process'])
 
 
 		output_projection_vector = dl.Vector(self.mesh_constructor_comm)
@@ -444,22 +593,22 @@ class PODProjector:
 		global_std_rel_errors = []
 		for (rank_in,rank_out) in rank_pairs:
 			# Define input projector operator for rank_in
-			V_r = MultiVector(V_MV[0],rank_in)
+			V_r = hp.MultiVector(V_MV[0],rank_in)
 			for i in range(rank_in):
 				V_r[i].axpy(1.,V_MV[i])
 			input_init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 1)
 			if Cinv is not None:
 				InputProjectorOperator = PriorPreconditionedProjector(V_r,Cinv, input_init_vector_lambda)
 			else:
-				InputProjectorOperator = LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
+				InputProjectorOperator = hp.LowRankOperator(np.ones(rank_in),V_r, input_init_vector_lambda)
 
 			# Define output projector operator for rank_out
-			U_MV = MultiVector(self.U_MV[0],rank_out)
+			U_MV = hp.MultiVector(self.U_MV[0],rank_out)
 			for i in range(rank_out):
 				U_MV[i].axpy(1.,self.U_MV[i])
 
 			init_vector_lambda = lambda x, dim: self.observable.init_vector(x,dim = 0)
-			PODOperator = LowRankOperator(np.ones(rank_out),U_MV,init_vector_lambda)
+			PODOperator = hp.LowRankOperator(np.ones(rank_out),U_MV,init_vector_lambda)
 
 
 			LocalErrors.zero()
@@ -472,9 +621,15 @@ class PODProjector:
 				LocalErrors[i].axpy(1.,LocalObservables[i])
 				denominator = LocalErrors[i].norm('l2')
 				InputProjectorOperator.mult(LocalParameters[i],input_projection_vector)
-				x = [self.u,input_projection_vector,None]
-				self.observable.setLinearizationPoint(x)
-				reduced_q_vector.axpy(1.,self.observable.eval(input_projection_vector))
+				if self.control_distribution is not None:
+					self.z.zero()
+					self.control_distribution.sample(self.z)
+					linearization_x = [self.u,input_projection_vector,None, self.z]
+				else:
+					linearization_x = [self.u,input_projection_vector,None]
+
+				self.observable.solveFwd(self.u,linearization_x)
+				reduced_q_vector.axpy(1.,self.observable.evalu(self.u))
 
 				PODOperator.mult(reduced_q_vector,output_projection_vector)
 				LocalErrors[i].axpy(-1.,output_projection_vector)

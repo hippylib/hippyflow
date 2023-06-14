@@ -14,10 +14,13 @@
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib import rc
 from pylab import *
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
-plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
-
+try:
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
+except:
+    print('Error loading latex, will not be used in plots')
+    pass
 
 def spectrum_plot(lambdas, axis_label = ['i','$\lambda$','Spectrum'],\
                  ylims = None, out_name = None):

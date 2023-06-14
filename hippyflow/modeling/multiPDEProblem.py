@@ -13,12 +13,12 @@
 
 
 import dolfin as dl
-from hippylib import *
+import hippylib as hp 
 from .blockVector import BlockVector
 
 
 
-class MultiPDEProblem(PDEProblem):
+class MultiPDEProblem(hp.PDEProblem):
     def __init__(self, problems):
         self.Vh = problems[0].Vh
         self.problems = problems
@@ -28,7 +28,7 @@ class MultiPDEProblem(PDEProblem):
         """ 
         Return a vector in the shape of the state 
         """
-        return BlockVector(self.Vh[STATE], self.n_problems)
+        return BlockVector(self.Vh[hp.STATE], self.n_problems)
         
     def generate_parameter(self):
         return self.problems[0].generate_parameter()
@@ -121,9 +121,9 @@ class MultiPDEProblem(PDEProblem):
 
         """
         out.zero()
-        if i == PARAMETER:
+        if i == hp.PARAMETER:
             tmp = self.generate_parameter()
-            if j == PARAMETER:
+            if j == hp.PARAMETER:
                 for k in range(self.n_problems):
                     self.problems[k].apply_ij(i,j, dir,tmp)
                     out.axpy(1., tmp)
@@ -133,7 +133,7 @@ class MultiPDEProblem(PDEProblem):
                     out.axpy(1., tmp)
         else:
             assert type(out) is BlockVector
-            if j == PARAMETER:
+            if j == hp.PARAMETER:
                 for k in range(self.n_problems):
                     self.problems[k].apply_ij(i,j, dir,out.data[k] )
             else:

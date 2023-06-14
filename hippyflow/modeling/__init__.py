@@ -17,6 +17,8 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
+from .controlJacobian import ObservableControlJacobian
+
 from .fullStateObservable import StateSpaceIdentityOperator
 
 from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperSettings
@@ -33,7 +35,7 @@ from .multiPDEProblem import MultiPDEProblem
 
 from .observable import LinearStateObservable, DomainRestrictedOperator, hippylibModelLinearStateObservable
 
-from .operatorWrappers import npToDolfinOperator
+from .operatorWrappers import npToDolfinOperator, MeanJTJfromDataOperator
 
 from .PODProjector import PODProjector, PODParameterList
 

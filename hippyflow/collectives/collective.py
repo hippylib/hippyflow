@@ -87,7 +87,7 @@ class MultipleSamePartitioningPDEsCollective:
             self._allReduce_array(v_array, op)
             return v_array[0]
                 
-        elif type(v) in [int, np.int, np.int32]:
+        elif type(v) in [int, np.int32]:
             v_array = np.array([v], dtype=np.int32)
             self._allReduce_array(v_array, op)
             return v_array[0]
@@ -126,7 +126,7 @@ class MultipleSamePartitioningPDEsCollective:
         broadcasted lives.
         """
         
-        if type(v) in [float, np.float64,int, np.int, np.int32]:
+        if type(v) in [float, np.float64, int, np.int32]:
             v_array = np.array([v])
             self.comm.Bcast(v_array,root = root)
             return v_array[0]

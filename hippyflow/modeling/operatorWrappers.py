@@ -51,4 +51,61 @@ class npToDolfinOperator:
 		y.zero()
 		y.set_local(self.matrix.T@x.get_local())
 
+
+class MeanJTJfromDataOperator:
+	"""
+	"""
+	def __init__(self, J, prior):
+		"""
+		"""
+
+		# Assumes J.shape = (ndata,rank,dM)
+		self._J = J
+		self.ndata, self.r, self.dM = self.J.shape
+		self._prior = prior
+
+		if hasattr(self.prior, "R"):
+			self.init_vector_lambda = lambda x,dim: prior.R.init_vector(x,dim)
+		else:
+			self.init_vector_lambda = lambda x,dim: prior.Hlr.init_vector(x,dim)
+
+	@property
+	def J(self):
+		return self._J
+
+	@property
+	def prior(self):
+		return self._prior
+	
+	def init_vector(self,x,dim):
+		"""
+		Initialize :code:`x` to be compatible with the range (:code:`dim=0`) or domain (:code:`dim=1`) of :code:`A`.
+		"""
+		assert init_vector_lambda is not None
+		self.init_vector_lambda(x,dim)
+
+	def mult(self,x,y):
+		"""
+		Compute :math:`y = mean(JTJ)x `
+		"""
+		x_np = x.get_local()
+		# print('x_np.shape = ',x_np.shape)
+		X_np = np.tile(x_np,(self.ndata,1))
+		# print('X_np.shape = ',X_np.shape)
+		assert X_np.shape == (self.ndata,self.dM)
+		JX_np = np.einsum('ijk,ik->ij',self.J,X_np)
+		# print('PhiTJX_np.shape = ',JX_np.shape)
+		JTJX_np = np.einsum('ijk,ij->ik',self.J,JX_np)
+		# print('JTPhiPhiTJX_np.shape = ',JTJX_np.shape)
+		y.set_local(np.mean(JTJX_np,axis = 0))
+
+	def transpmult(self,x,y):
+		"""
+		Compute :math:`y = mean(JTJ)x `
+		JTJ is naturally self-adjoint so tranpsmult is mult.
+		"""
+		return self.mult(x,y)
+
+
+
 		

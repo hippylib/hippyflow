@@ -19,7 +19,6 @@ import numpy as np
 import math
 
 import sys, os
-sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR'))
 import hippylib as hp
 
 
