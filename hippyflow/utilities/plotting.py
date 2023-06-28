@@ -17,7 +17,7 @@ from pylab import *
 try:
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
-    plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
+    plt.rc('text.latex', preamble=r'\usepackage{amsfonts, amsmath, mathrsfs}')
 except:
     print('Error loading latex, will not be used in plots')
     pass

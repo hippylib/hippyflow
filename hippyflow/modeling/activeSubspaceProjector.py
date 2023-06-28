@@ -124,7 +124,14 @@ class SeriallySampledJacobianOperator:
 			self.temp = dl.Vector(communicator)
 
 		self.u = self.observable.generate_vector(hp.STATE)
-		self.m = self.observable.generate_vector(hp.PARAMETER)
+		if hasattr(self.observable.problem,'parameter_projection'):
+			if communicator is not None:
+				self.m = dl.Vector(communicator)
+			else:
+				self.m = dl.Vector()
+			self.prior.init_vector(self.m,0)
+		else:
+			self.m = self.observable.generate_vector(hp.PARAMETER)
 		if self.control_distribution is None:
 			self.z = None
 		else:
@@ -142,7 +149,10 @@ class SeriallySampledJacobianOperator:
 		if self.operation == 'JJT':
 			self.observable.init_vector(x,0)
 		elif self.operation == 'JTJ':
-			self.observable.init_vector(x,1)
+			if hasattr(self.observable.problem,'parameter_projection'):
+				self.prior.init_vector(x,0)
+			else:
+				self.observable.init_vector(x,1)
 		else: 
 			raise
 
@@ -165,6 +175,7 @@ class SeriallySampledJacobianOperator:
 				# Iterate if there are solver issues
 				solved = False
 				while not solved:
+					iterate = 0
 					try:
 						# Sample from the prior
 						self.m.zero()
@@ -177,7 +188,10 @@ class SeriallySampledJacobianOperator:
 							self.z.zero()
 							self.control_distribution.sample(self.z)
 							linearization_x = [self.u,self.m,None,self.z]
-
+						if hasattr(self.observable.problem,'parameter_projection'):
+							# In this case the parameter needs to be projected to subdomain
+							m_sample = self.observable.problem.parameter_projection(self.m)
+							linearization_x[1] = m_sample
 
 						# Solve the PDE
 						print('Attempting to solve')
@@ -189,7 +203,9 @@ class SeriallySampledJacobianOperator:
 						solved = True
 					except:
 						print('Issue with the solution, moving on')
-						pass
+						iterate += 1
+					if iterate > 100:
+						print('Some sort of issue, no infinite loop allowed (+:')
 				# Define action on matrix (as represented by hp.MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
@@ -348,6 +364,9 @@ class ActiveSubspaceProjector:
 						x = [u,m,None,z]
 					else:
 						x = [u,m,None]
+					if hasattr(self.observable.problem,'parameter_projection'):
+						m_sample = self.observable.problem.parameter_projection(m)
+						x[1] = m_sample
 					observable.solveFwd(u,x)
 					observable.setLinearizationPoint(x)
 					solved = True
@@ -480,6 +499,9 @@ class ActiveSubspaceProjector:
 			# If this is the case, then the KKT blocks have not been built yet
 			# we overcome this by solving somewhere and setting the linearization pt.
 			m_mean = self.prior.mean
+			if hasattr(self.observable.problem,'parameter_projection'):
+				m_mean = self.observable.problem.parameter_projection(m_mean)
+
 			u_at_mean = self.observable.problem.generate_state()
 			if self.control_distribution is not None:
 				if hasattr(self.control_distribution,'mean'):
@@ -542,18 +564,23 @@ class ActiveSubspaceProjector:
 				np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
 				np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 				plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_GN,\
-					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				try:
+					_ = spectrum_plot(self.d_GN,\
+						axis_label = ['i',r'$\lambda_i$',\
+						r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				except:
+					print('Issue plotting, probably latex related')
 			if operation == 'JJT':
 				np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
 				np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 				plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_NG,\
-					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
-
+				try:
+					_ = spectrum_plot(self.d_NG,\
+						axis_label = ['i',r'$\lambda_i$',\
+						r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				except:
+					print('Issue plotting, probably, latex related')
 	def construct_output_subspace(self,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized construction'.center(80))
@@ -726,9 +753,17 @@ class ActiveSubspaceProjector:
 				x = [self.u,self.m,None,self.z]
 			else:
 				x = [self.u,self.m,None]
+			if hasattr(self.observable.problem,'parameter_projection'):
+				# In this case the parameter needs to be projected to subdomain
+				m_sample = self.observable.problem.parameter_projection(self.m)
+				x[1] = m_sample
 			self.observable.solveFwd(self.u,x)
 			self.observable.setLinearizationPoint(x)
-			this_m = self.m.get_local()
+			if hasattr(self.observable.problem,'parameter_projection'):
+				# In this case the parameter needs to be projected to subdomain
+				this_m = m_sample.get_local()
+			else:
+				this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
 			np.save(process_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
 			np.save(process_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
@@ -1011,6 +1046,7 @@ class ActiveSubspaceProjector:
 				t0 = time.time()
 				hp.parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,LocalParameters[i])
+
 
 			LocalErrors = hp.MultiVector(self.ms[0],self.parameters['error_test_samples'])
 			projection_vector = self.observable.generate_vector(hp.PARAMETER) 
