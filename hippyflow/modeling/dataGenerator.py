@@ -207,7 +207,7 @@ class DataGenerator:
 		################################################################################
 		if compress:
 			print('Commencing compression'.center(80))
-			has_z_data = hasattr(observable.model.problem, 'Cz')
+			has_z_data = hasattr(self.observable.model.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = True,has_z_data = has_z_data)
 
 
