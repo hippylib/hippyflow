@@ -422,9 +422,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 
 
 	if has_z_data:
-		np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
-	else:
 		np.savez_compressed(file_path+'mqz_data.npz',m_data = m_data, q_data = q_data)
+	else:
+		np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
 	if derivatives[0]:
 		if compress_JTPhi:
 			np.savez_compressed(file_path+'JTPhi_data.npz',JTPhi_data = JTPhi_data)
