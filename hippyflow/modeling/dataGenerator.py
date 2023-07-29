@@ -102,8 +102,6 @@ class DataGenerator:
 		Phi = sketching_arrays['Phi']
 		JTPhi = sketching_arrays['JTPhi']
 
-
-
 		if self.settings['verbose']:
 			print(80*'#')
 
@@ -116,14 +114,11 @@ class DataGenerator:
 			self.m.zero()
 			self.prior.sample(self.noise,self.m)
 
-
-
 			if self.control_distribution is not None:
 				self.control_distribution.sample(self.z)
 				x = [self.u,self.m,None,self.z]
 			else:
 				x = [self.u,self.m,None]
-
 
 			self.observable.solveFwd(self.u,x)
 			self.observable.setLinearizationPoint(x)
@@ -139,8 +134,6 @@ class DataGenerator:
 
 			fwd_sample_time = time.time() -t0_samplei
 
-
-
 			################################################################################
 			# Derivative computations and saving
 
@@ -151,8 +144,8 @@ class DataGenerator:
 					assert JTPhi is not None
 					JTPhi.zero()
 					hp.MatMvTranspmult(self.J,Phi,JTPhi)
-					JPhi_np = hf.mv_to_dense(JTPhi)
-					np.save(data_dir+'J_data/JTPhi'+str(i)+'.npy',JPhi_np)
+					JTPhi_np = hf.mv_to_dense(JTPhi)
+					np.save(data_dir+'J_data/JTPhi'+str(i)+'.npy',JTPhi_np)
 				else:
 					# Compute it with randomized SVD
 					rM = self.settings['rM']
@@ -176,8 +169,8 @@ class DataGenerator:
 					assert JzTPhi is not None
 					JzTPhi.zero()
 					hp.MatMvTranspmult(self.Jz,Phi,JzTPhi)
-					JzPhi_np = hf.mv_to_dense(JzTPhi)
-					np.save(data_dir+'Jz_data/JzTPhi'+str(i)+'.npy',JzPhi_np)
+					JzTPhi_np = hf.mv_to_dense(JzTPhi)
+					np.save(data_dir+'Jz_data/JzTPhi'+str(i)+'.npy',JzTPhi_np)
 				else:
 					Omega_z.zero() # probably unecessary
 					hp.parRandom.normal(1.,Omega_z)
@@ -207,7 +200,7 @@ class DataGenerator:
 		################################################################################
 		if compress:
 			print('Commencing compression'.center(80))
-			has_z_data = hasattr(observable.model.problem, 'Cz')
+			has_z_data = hasattr(self.observable.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = True,has_z_data = has_z_data)
 
 
@@ -253,8 +246,8 @@ class DataGenerator:
 				rM = self.settings['rM']
 				oversample = self.settings['oversample']
 
-				parameter_vector = dl.Vector(self.mesh_constructor_comm)
-				self.J.init_vector(parameter_vector,1)
+				parameter_vector = self.observable.problem.generate_parameter()
+				# self.J.init_vector(parameter_vector,1)
 				nvec_Omega_m = min(rM +oversample,self.dQ,self.dM) # Fix me in the case that min is dQ :)
 				Omega_m = hp.MultiVector(parameter_vector,nvec_Omega_m)
 				hp.parRandom.normal(1.,Omega_m)
@@ -386,7 +379,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 			rQ = np.load(file_path+'/J_data/JTPhi'+str(index)+'.npy').shape[1]
 			JTPhi_data = np.zeros((ndata,dM,rQ))
 		if compress_Jsvd:
-			rank = np.load(file_path+'/J_data/sigma_sample_'+str(index)+'.npy').shape[1]
+			rank = np.load(file_path+'/J_data/sigma_sample_'+str(index)+'.npy').shape[0]
 			U_data = np.zeros((ndata,dQ,rank))
 			sigma_data = np.zeros((ndata,rank))
 			V_data = np.zeros((ndata,dM,rank))
