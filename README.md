@@ -251,3 +251,15 @@ Journal of Computational Physics, 112104
   year={2022}
 }
 }</pre></details>
+
+
+- \[6\] Luo, D., O'Leary-Roseberry, T., Chen P., Ghattas, O.,
+[**Efficient PDE-Constrained optimization under high-dimensional uncertainty using derivative-informed neural operators**](https://arxiv.org/abs/2305.20053).
+([Download](https://arxiv.org/abs/2305.20053))<details><summary>BibTeX</summary><pre>
+@article{luo2023efficient,
+  title={Efficient PDE-Constrained optimization under high-dimensional uncertainty using derivative-informed neural operators},
+  author={Luo, Dingcheng and O'Leary-Roseberry, Thomas and Chen, Peng and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2305.20053},
+  year={2023}
+}
+}</pre></details>
