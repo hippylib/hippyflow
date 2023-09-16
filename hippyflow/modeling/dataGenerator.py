@@ -84,7 +84,8 @@ class DataGenerator:
 
 
 	def generate(self, n_samples, derivatives = (0,0),\
-					output_basis = None,data_dir = 'data/test/', compress = True):
+					output_basis = None, input_basis = None,\
+					data_dir = 'data/test/', compress = True):
 		"""
 		"""
 		os.makedirs(data_dir+'/mq_data/',exist_ok=True)
@@ -96,11 +97,14 @@ class DataGenerator:
 			os.makedirs(data_dir+'/Jz_data/',exist_ok=True)
 
 
-		sketching_arrays = self.initialize_sampling(derivatives = derivatives,output_basis = output_basis)
+		sketching_arrays = self.initialize_sampling(derivatives = derivatives,\
+					output_basis = output_basis, input_basis = input_basis)
 		Omega_m = sketching_arrays['Omega_m']
 		Omega_z = sketching_arrays['Omega_z']
 		Phi = sketching_arrays['Phi']
 		JTPhi = sketching_arrays['JTPhi']
+		Psi = sketching_arrays['Psi']
+		JPsi = sketching_arrays['JPsi']
 
 		if self.settings['verbose']:
 			print(80*'#')
@@ -146,6 +150,14 @@ class DataGenerator:
 					hp.MatMvTranspmult(self.J,Phi,JTPhi)
 					JTPhi_np = hf.mv_to_dense(JTPhi)
 					np.save(data_dir+'J_data/JTPhi'+str(i)+'.npy',JTPhi_np)
+				elif input_basis is not None:
+					assert Psi is not None
+					assert JPsi is not None
+					JPsi.zero()
+					hp.MatMvMult(self.J,Psi,JPsi)
+					JPsi_np = hf.mv_to_dense(JPsi)
+					np.save(data_dir+'J_data/JPsi'+str(i)+'.npy',JPsi_np)
+
 				else:
 					# Compute it with randomized SVD
 					rM = self.settings['rM']
@@ -201,11 +213,12 @@ class DataGenerator:
 		if compress:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
-			compress_dataset(data_dir,derivatives = derivatives, clean_up = True,has_z_data = has_z_data)
+			compress_dataset(data_dir,derivatives = derivatives, clean_up = True,\
+							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
 
 
 
-	def initialize_sampling(self,derivatives,output_basis = None):
+	def initialize_sampling(self,derivatives,output_basis = None,input_basis = None):
 		"""
 		"""
 		Omega_m = None
@@ -213,6 +226,10 @@ class DataGenerator:
 		Phi = None
 		JTPhi = None
 		JzTPhi = None
+		# Psi is for the first parameter "m" and has no relation to z
+		Psi = None
+		JPsi = None
+		
 
 		setup_parameter_jacobian = bool(derivatives[0])
 		setup_control_jacobian = bool(derivatives[1])
@@ -242,6 +259,10 @@ class DataGenerator:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				Phi = hf.dense_to_mv_local(output_basis,qsample)
 				JTPhi = hp.MultiVector(self.m,Phi.nvec())
+			elif input_basis is not None:
+				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
+				Psi = hf.dense_to_mv_local(input_basis,self.m)
+				JPsi = hp.MultiVector(qsample,Psi.nvec())
 			else:
 				rM = self.settings['rM']
 				oversample = self.settings['oversample']
@@ -301,11 +322,14 @@ class DataGenerator:
 
 
 
-		return {'Omega_m':Omega_m, 'Omega_z': Omega_z, 'Phi': Phi, 'JTPhi':JTPhi, 'JzTPhi':JzTPhi}
+		return {'Omega_m':Omega_m, 'Omega_z': Omega_z,\
+				 'Phi': Phi, 'JTPhi':JTPhi, 'JzTPhi':JzTPhi,\
+				 'Psi': Psi, 'JPsi': JPsi}
 
 
 
-def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data = False):
+def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
+					has_z_data = False, input_basis = None, output_basis = None):
 
 	################################################################################
 	# Pre-processing and array allocations
@@ -313,6 +337,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 	# Booleans about what to save and assertions for safeguarding
 	if derivatives[0]:
 		compress_JTPhi = True
+		compress_JPsi = True
 		compress_Jsvd = True
 
 	if derivatives[1]:
@@ -338,11 +363,13 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 				assert os.path.exists(data_path+'z_sample_'+str(index)+'.npy')
 			if derivatives[0]:
 				JTPhi_exists = os.path.exists(file_path+'/J_data/JTPhi'+str(index)+'.npy')
+				JPsi_exists = os.path.exists(file_path+'/J_data/JPsi'+str(index)+'.npy')
 				Jsvd_exists = os.path.exists(file_path+'/J_data/U_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/J_data/sigma_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/J_data/V_sample_'+str(index)+'.npy')
-				assert JTPhi_exists or Jsvd_exists
+				assert JTPhi_exists or Jsvd_exists or JPsi_exists
 				compress_JTPhi = compress_JTPhi and JTPhi_exists
+				compress_JPsi = compress_JPsi and JPsi_exists
 				compress_Jsvd = compress_Jsvd and Jsvd_exists
 
 			if derivatives[1]:
@@ -378,6 +405,10 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 		if compress_JTPhi:
 			rQ = np.load(file_path+'/J_data/JTPhi'+str(index)+'.npy').shape[1]
 			JTPhi_data = np.zeros((ndata,dM,rQ))
+		if compress_JPsi:
+			rM = np.load(file_path+'/J_data/JPsi'+str(index)+'.npy').shape[1]
+			JPsi_data = np.zeros((ndata,dQ,rM))
+
 		if compress_Jsvd:
 			rank = np.load(file_path+'/J_data/sigma_sample_'+str(index)+'.npy').shape[0]
 			U_data = np.zeros((ndata,dQ,rank))
@@ -400,6 +431,8 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 		if derivatives[0]:
 			if compress_JTPhi:
 				JTPhi_data[index] = np.load(file_path+'/J_data/JTPhi'+str(index)+'.npy')
+			if compress_JPsi:
+				JPsi_data[index] = np.load(file_path+'/J_data/JPsi'+str(index)+'.npy')
 			if compress_Jsvd:
 				U_data[index] = np.load(file_path+'/J_data/U_sample_'+str(index)+'.npy')
 				sigma_data[index] = np.load(file_path+'/J_data/sigma_sample_'+str(index)+'.npy')
@@ -420,7 +453,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,has_z_data =
 		np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
 	if derivatives[0]:
 		if compress_JTPhi:
-			np.savez_compressed(file_path+'JTPhi_data.npz',JTPhi_data = JTPhi_data)
+			np.savez_compressed(file_path+'JTPhi_data.npz',JTPhi_data = JTPhi_data,Phi = output_basis)
+		if compress_JPsi:
+			np.savez_compressed(file_path+'JPsi_data.npz',JPsi_data = JPsi_data,Psi = input_basis)
 		if compress_Jsvd:
 			np.savez_compressed(file_path+'Jsvd_data.npz',U_data = U_data, sigma_data =sigma_data, V_data = V_data)
 
