@@ -85,7 +85,7 @@ class DataGenerator:
 
 	def generate(self, n_samples, derivatives = (0,0),\
 					output_basis = None, input_basis = None,\
-					data_dir = 'data/test/', compress = True):
+					data_dir = 'data/test/', compress = True, clean_up = True):
 		"""
 		"""
 		os.makedirs(data_dir+'/mq_data/',exist_ok=True)
@@ -213,7 +213,7 @@ class DataGenerator:
 		if compress:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
-			compress_dataset(data_dir,derivatives = derivatives, clean_up = True,\
+			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up,\
 							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
 
 
