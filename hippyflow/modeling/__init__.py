@@ -19,6 +19,8 @@ from .cMinimization import ConstrainedNSolver
 
 from .dataGenerator import DataGenerator, compress_dataset
 
+from .customDataGenerator import CustomDataGenerator
+
 from .controlJacobian import ObservableControlJacobian
 
 from .fullStateObservable import StateSpaceIdentityOperator
