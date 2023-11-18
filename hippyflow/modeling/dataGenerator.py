@@ -106,24 +106,29 @@ class DataGenerator:
 			print(80*'#')
 
 		for i in range(n_samples):
-			t0_samplei = time.time()
-			################################################################################
-			# Sample forward map m -> q(m) or m,z -> q(m,z) and save
-			self.parRandom.normal(1,self.noise)
+			try:
+				t0_samplei = time.time()
+				################################################################################
+				# Sample forward map m -> q(m) or m,z -> q(m,z) and save
+				self.parRandom.normal(1,self.noise)
 
-			self.m.zero()
-			self.prior.sample(self.noise,self.m)
+				self.m.zero()
+				self.prior.sample(self.noise,self.m)
 
-			if self.control_distribution is not None:
-				self.control_distribution.sample(self.z)
-				x = [self.u,self.m,None,self.z]
-			else:
-				x = [self.u,self.m,None]
+				if self.control_distribution is not None:
+					self.control_distribution.sample(self.z)
+					x = [self.u,self.m,None,self.z]
+				else:
+					x = [self.u,self.m,None]
 
-			self.observable.solveFwd(self.u,x)
-			self.observable.setLinearizationPoint(x)
-			this_m = self.m.get_local()
-			this_q = self.observable.evalu(self.u).get_local()
+				self.observable.solveFwd(self.u,x)
+				self.observable.setLinearizationPoint(x)
+				this_m = self.m.get_local()
+				this_q = self.observable.evalu(self.u).get_local()
+			except:
+				print('Encountered bad sample (solver not converged). Skipping')
+				i = i - 1
+				continue
 
 			np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
 			np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)

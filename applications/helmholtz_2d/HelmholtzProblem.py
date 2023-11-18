@@ -232,10 +232,11 @@ class SingleSourceHelmholtzProblem(PDEProblem):
             
             
     def _createLUSolver(self):
-        if dlversion() <= (1,6,0):
-            return dl.PETScLUSolver()
-        else:
-            return dl.PETScLUSolver(self.Vh[STATE].mesh().mpi_comm() )
+        # if dlversion() <= (1,6,0):
+        #     return dl.PETScLUSolver()
+        # else:
+        #     return dl.PETScLUSolver(self.Vh[STATE].mesh().mpi_comm() )
+        return PETScLUSolver(self.Vh[STATE].mesh().mpi_comm())
                 
 
         
