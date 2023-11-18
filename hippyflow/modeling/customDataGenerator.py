@@ -32,7 +32,7 @@ def data_generator_settings(settings = {}):
 
 	return settings
 
-class DataGenerator:
+class CustomDataGenerator:
 
 	def __init__(self,observable, prior, control_distribution = None,\
 					settings = data_generator_settings(), parRandom = None,\
@@ -110,29 +110,24 @@ class DataGenerator:
 			print(80*'#')
 
 		for i in range(n_samples):
-			try:
-				t0_samplei = time.time()
-				################################################################################
-				# Sample forward map m -> q(m) or m,z -> q(m,z) and save
-				self.parRandom.normal(1,self.noise)
+			t0_samplei = time.time()
+			################################################################################
+			# Sample forward map m -> q(m) or m,z -> q(m,z) and save
+			self.parRandom.normal(1,self.noise)
 
-				self.m.zero()
-				self.prior.sample(self.noise,self.m)
+			self.m.zero()
+			self.prior.sample(self.noise,self.m)
 
-				if self.control_distribution is not None:
-					self.control_distribution.sample(self.z)
-					x = [self.u,self.m,None,self.z]
-				else:
-					x = [self.u,self.m,None]
+			if self.control_distribution is not None:
+				self.control_distribution.sample(self.z)
+				x = [self.u,self.m,None,self.z]
+			else:
+				x = [self.u,self.m,None]
 
-				self.observable.solveFwd(self.u,x)
-				self.observable.setLinearizationPoint(x)
-				this_m = self.m.get_local()
-				this_q = self.observable.evalu(self.u).get_local()
-			except:
-				print('Encountered bad sample (solver not converged). Skipping')
-				i = i - 1
-				continue
+			self.observable.solveFwd(self.u,x)
+			self.observable.setLinearizationPoint(x)
+			this_m = self.m.get_local()
+			this_q = self.observable.evalu(self.u).get_local()
 
 			np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
 			np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
@@ -221,6 +216,39 @@ class DataGenerator:
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up,\
 							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
 
+
+	def compute_sketched_jacobians(self, derivatives, output_basis, mu_file, data_dir, compress=False, clean_up=False):
+		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_basis = output_basis)
+		Omega_m = sketching_arrays['Omega_m']
+		Phi = sketching_arrays['Phi']
+		JTPhi = sketching_arrays['JTPhi']
+
+		mu_data = np.load(mu_file)
+		m_data = mu_data['m_data']
+		u_data = mu_data['q_data']
+
+		N_data = m_data.shape[0]
+		os.makedirs(data_dir+'/J_data/',exist_ok=True)
+
+		for i in range(N_data):
+			m = m_data[i]
+			u = u_data[i]
+			self.m.set_local(m)
+			self.u.set_local(u)
+			
+			x = [self.u, self.m, None]
+			self.observable.setLinearizationPoint(x)
+			
+			JTPhi.zero()
+			hp.MatMvTranspmult(self.J,Phi,JTPhi)
+			JTPhi_np = hf.mv_to_dense(JTPhi)
+			np.save(data_dir+f'J_data/JTPhi{i}.npy', JTPhi_np)
+
+		################################################################################
+		if compress:
+			print('Commencing compression'.center(80))
+			has_z_data = hasattr(self.observable.problem, 'Cz')
+			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data, input_basis = None, output_basis = output_basis)
 
 
 	def initialize_sampling(self,derivatives,output_basis = None,input_basis = None):
