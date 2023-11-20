@@ -65,7 +65,7 @@ class MeanJTJfromDataOperator:
 		self._prior = prior
 
 		if noise_cov_inv is not None:
-			assert hasattr(noise_cov_inv, '__mult__')
+			assert hasattr(noise_cov_inv, '__matmul__')
 		self._noise_cov_inv = noise_cov_inv
 
 		if hasattr(self.prior, "R"):
@@ -103,9 +103,12 @@ class MeanJTJfromDataOperator:
 		assert X_np.shape == (self.ndata,self.dM)
 		JX_np = np.einsum('ijk,ik->ij',self.J,X_np)
 
+		print(JX_np.shape)
+
 		# compute with noise covariance, if present
 		if self.noise_cov_inv is not None:
-			JX_np = self.noise_cov_inv @ JX_np
+			# JX_np = self.noise_cov_inv @ JX_np
+			JX_np = np.einsum('ij,kj->ki', self.noise_cov_inv, JX_np)
 
 		# print('PhiTJX_np.shape = ',JX_np.shape)
 		JTJX_np = np.einsum('ijk,ij->ik',self.J,JX_np)
