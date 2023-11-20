@@ -103,8 +103,6 @@ class MeanJTJfromDataOperator:
 		assert X_np.shape == (self.ndata,self.dM)
 		JX_np = np.einsum('ijk,ik->ij',self.J,X_np)
 
-		print(JX_np.shape)
-
 		# compute with noise covariance, if present
 		if self.noise_cov_inv is not None:
 			# JX_np = self.noise_cov_inv @ JX_np
