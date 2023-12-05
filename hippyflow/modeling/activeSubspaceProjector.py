@@ -612,7 +612,7 @@ class ActiveSubspaceProjector:
 
 		if operation == 'JTJ':
 			return self.d_GN, as_basis, as_projector
-		elif operation == 'JJT'
+		elif operation == 'JJT':
 			return self.d_NG, output_basis, output_projector
 
 	def construct_output_subspace(self,name_suffix = None):
