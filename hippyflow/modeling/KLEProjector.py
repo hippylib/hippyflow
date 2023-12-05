@@ -38,28 +38,35 @@ def KLEParameterList():
 	parameters['verbose']					= [True, 'Boolean for printing']
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
+	parameters['save_and_plot']				= [True, 'save and plot or not']
 
 	parameters['input_basis_name']			= ['KLE_basis', 'string for naming']
 
 	return hp.ParameterList(parameters)
 
-class MRinvM:
-	"""
-	MRinvM implements the action of :math:`MR^{-1}M` for a BiLaplacianPrior
-	"""
+class MassPreconditionedCovarianceOperator:
+	def __init__(self, C, M):
+		"""
+		Linear operator representing the mass matrix preconditioned
+		covariance matrix :math:`M C M`
+		"""
+		self.C = C 
+		self.M = M 
+		self.mpi_comm = self.M.mpi_comm()
 
-	def __init__(self,Rsolver,M):
-		self.Rsolver = Rsolver
-		self.M = M
-		self.help = dl.Vector(self.M.mpi_comm())
-		self.M.init_vector(self.help,1)
+
+		self.Mx = dl.Vector(self.mpi_comm)
+		self.CMx = dl.Vector(self.mpi_comm)
+		self.M.init_vector(self.Mx, 0)
+		self.M.init_vector(self.CMx, 0)
 
 	def init_vector(self,x,dim):
 		self.M.init_vector(x,dim)
 
-	def mult(self,x,y):
-		self.Rsolver.solve(self.help,self.M*x)
-		self.M.mult(self.help,y)
+	def mult(self, x, y):
+		self.M.mult(x, self.Mx)
+		self.C.mult(self.Mx, self.CMx)
+		self.M.mult(self.CMx, y)
 
 
 
@@ -93,6 +100,8 @@ class KLEProjector:
 
 		self.noise = None
 
+		self.C = hp.Solver2Operator(self.prior.Rsolver, mpi_comm=self.mesh_constructor_comm)
+
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.prior.Vh.mesh(), self.collective)
@@ -118,6 +127,10 @@ class KLEProjector:
 		self.collective.bcast(Omega,root = 0)
 		return Omega
 
+		self.kle_basis = None
+		self.kle_projector = None
+	
+
 
 
 	def construct_input_subspace(self,M_orthogonal = True):
@@ -128,7 +141,9 @@ class KLEProjector:
 		t0 = time.time()
 		assert hasattr(self.prior,'Rsolver') and hasattr(self.prior,'M') and hasattr(self.prior,'Msolver')
 
-		KLE_Operator = MRinvM(self.prior.Rsolver,self.prior.M)
+
+
+		KLE_Operator = MassPreconditionedCovarianceOperator(self.C,self.prior.M)
 
 		# Totally unnecessary averaging that I am doing in order to keep the code consistent
 		Average_KLE_Operator = CollectiveOperator(KLE_Operator, self.collective, mpi_op = 'avg')
@@ -148,17 +163,24 @@ class KLEProjector:
 			self.d_KLE, self.V_KLE = hp.doublePassG(KLE_Operator,\
 				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = True
+			kle_basis = self.V_KLE
+			kle_projector = hp.MultiVector(kle_basis)
+			hp.MatMvMult(self.prior.M,kle_basis,kle_projector)
+			
+
 		else:
 			RsolverOperator = hp.Solver2Operator(self.prior.Rsolver)
 			self.d_KLE, self.V_KLE = hp.doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = False
+			kle_basis = self.V_KLE
+			kle_projector = hp.MultiVector(kle_basis) #copy constructor
 
 		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print('Construction of input subspace took ',self._subspace_construction_time,'s')
 			# print('Input subspace eigenvalues = ',self.d_GN)
 
-		if True and MPI.COMM_WORLD.rank == 0:
+		if True and MPI.COMM_WORLD.rank == 0 and self.parameters['save_and_plot']:
 			np.save(self.parameters['output_directory']+self.parameters['input_basis_name'],mv_to_dense(self.V_KLE))
 			np.save(self.parameters['output_directory']+'KLE_d',self.d_KLE)
 
@@ -166,6 +188,8 @@ class KLEProjector:
 			_ = spectrum_plot(self.d_KLE,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $C$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+		return self.d_KLE, kle_basis, kle_projector
 
 
 	def test_errors(self, ranks = [None],cut_off = 1e-12):

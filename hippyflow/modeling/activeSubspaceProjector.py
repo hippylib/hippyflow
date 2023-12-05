@@ -448,11 +448,20 @@ class ActiveSubspaceProjector:
 			if hasattr(self.prior, "R"):
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+				as_basis = self.V_GN
+				as_projector = hp.MultiVector(as_basis)
+				hp.MatMvMult(self.prior.R,as_basis,as_projector)
 			else:
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+				as_basis = self.V_GN
+				as_projector = hp.MultiVector(as_basis)
+				hp.MatMvMult(self.prior.Hlr,as_basis,as_projector)
 		else:
 			self.d_GN, self.V_GN = hp.doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+			as_basis = self.V_GN
+			as_projector = hp.MultiVector(as_basis)
+
 		total_init_time = time.time() - t0
 		for i in range(100):
 			print(80*'#')
@@ -474,6 +483,8 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+
+		return self.d_GN, as_basis, as_projector
 
 	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ',name_suffix = None):
 		"""
