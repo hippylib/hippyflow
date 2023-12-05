@@ -400,10 +400,10 @@ class ActiveSubspaceProjector:
 	def construct_input_subspace(self,prior_preconditioned = True,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized AS construction'.center(80))
-			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
+			return self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
 			print('Construction via batched AS construction'.center(80))
-			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned,name_suffix = name_suffix)
+			return self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned,name_suffix = name_suffix)
 
 
 
@@ -555,21 +555,34 @@ class ActiveSubspaceProjector:
 				if hasattr(self.prior, "R"):
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+					as_basis = self.V_GN
+					as_projector = hp.MultiVector(as_basis)
+					hp.MatMvMult(self.prior.R,as_basis,as_projector)
 				else:
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+					as_basis = self.V_GN
+					as_projector = hp.MultiVector(as_basis)
+					hp.MatMvMult(self.prior.Hlr,as_basis,as_projector)
 			else:
 				self.d_GN, self.V_GN = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+				as_basis = self.V_GN
+				as_projector = hp.MultiVector(as_basis)
 			self.prior_preconditioned = prior_preconditioned
 			self._input_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 				print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
+
 		elif operation == 'JJT':
 			self.d_NG, self.U_NG = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			output_basis = self.U_NG
+			output_projector = hp.MultiVector(output_basis)
+
 			self._output_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
-		
+			
+
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
 			name = 'AS_'+str(int(self.parameters['samples_per_process']*self.collective.size()))
 			if name_suffix is not None:
@@ -596,12 +609,18 @@ class ActiveSubspaceProjector:
 						r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 				except:
 					print('Issue plotting, probably, latex related')
+
+		if operation == 'JTJ':
+			return self.d_GN, as_basis, as_projector
+		elif operation == 'JJT'
+			return self.d_NG, output_basis, output_projector
+
 	def construct_output_subspace(self,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized construction'.center(80))
-			self._construct_serialized_jacobian_subspace(operation = 'JJT',name_suffix = name_suffix)
+			return self._construct_serialized_jacobian_subspace(operation = 'JJT',name_suffix = name_suffix)
 		else:
-			self._construct_output_subspace_batched(name_suffix = name_suffix)
+			return self._construct_output_subspace_batched(name_suffix = name_suffix)
 
 	def _construct_output_subspace_batched(self,name_suffix = None):
 		"""
@@ -633,6 +652,8 @@ class ActiveSubspaceProjector:
 
 		self.collective.bcast(Omega,root = 0)
 		self.d_NG, self.U_NG = hp.doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
+		output_basis = self.U_NG
+		output_projector = hp.MultiVector(output_basis)
 		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
@@ -648,6 +669,9 @@ class ActiveSubspaceProjector:
 			_ = spectrum_plot(self.d_NG,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+
+		return self.d_NG, output_basis, output_projector
+
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
 		if self.parameters['serialized_sampling']:
