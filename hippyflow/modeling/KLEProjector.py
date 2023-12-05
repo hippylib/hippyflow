@@ -39,6 +39,8 @@ def KLEParameterList():
 	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 
+	parameters['input_basis_name']			= ['KLE_basis', 'string for naming']
+
 	return hp.ParameterList(parameters)
 
 class MRinvM:
@@ -157,7 +159,7 @@ class KLEProjector:
 			# print('Input subspace eigenvalues = ',self.d_GN)
 
 		if True and MPI.COMM_WORLD.rank == 0:
-			np.save(self.parameters['output_directory']+'KLE_projector',mv_to_dense(self.V_KLE))
+			np.save(self.parameters['output_directory']+self.parameters['input_basis_name'],mv_to_dense(self.V_KLE))
 			np.save(self.parameters['output_directory']+'KLE_d',self.d_KLE)
 
 			out_name = self.parameters['output_directory']+'KLE_eigenvalues_'+str(self.parameters['rank'])+'.pdf'

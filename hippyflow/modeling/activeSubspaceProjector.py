@@ -45,6 +45,10 @@ def ActiveSubspaceParameterList():
 	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
+	parameters['input_basis_name']			= ['_input_projector', 'string for naming']
+	parameters['output_basis_name']			= ['_output_projector', 'string for naming']
+
+
 
 	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
 														many samples are allocated on one process ']
@@ -463,7 +467,7 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+			np.save(self.parameters['output_directory']+name+self.parameters['input_basis_name'],mv_to_dense(self.V_GN))
 			np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 
 			plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -561,7 +565,7 @@ class ActiveSubspaceProjector:
 				assert type(name_suffix) is str
 				name += name_suffix
 			if operation == 'JTJ':
-				np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+name+self.parameters['input_basis_name'],mv_to_dense(self.V_GN))
 				np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 				plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 				try:
@@ -571,7 +575,7 @@ class ActiveSubspaceProjector:
 				except:
 					print('Issue plotting, probably latex related')
 			if operation == 'JJT':
-				np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+name+self.parameters['output_basis_name'],mv_to_dense(self.U_NG))
 				np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 				plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -626,7 +630,7 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+			np.save(self.parameters['output_directory']+name+self.parameters['output_basis_name'],mv_to_dense(self.U_NG))
 			np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 			plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
