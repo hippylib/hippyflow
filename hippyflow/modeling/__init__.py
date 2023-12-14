@@ -41,7 +41,7 @@ from .observable import LinearStateObservable, DomainRestrictedOperator, hippyli
 
 from .operatorWrappers import npToDolfinOperator, MeanJTJfromDataOperator
 
-from .PODProjector import PODProjector, PODParameterList
+from .PODProjector import PODProjector, PODParameterList, PODProjectorFromData
 
 from .priorPreconditionedProjector import PriorPreconditionedProjector
 

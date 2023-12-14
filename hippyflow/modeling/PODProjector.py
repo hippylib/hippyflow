@@ -15,6 +15,11 @@ import dolfin as dl
 import numpy as np
 import time
 import hippylib as hp
+from scipy.sparse import csr_matrix
+
+import scipy.linalg as la 
+import scipy.sparse.linalg as spla 
+
 from mpi4py import MPI 
 import os
 
@@ -650,10 +655,175 @@ class PODProjector:
 
 
 
+def weighted_l2_norm_vector(x, W):
+    Wx = W @ x 
+    norm2 = np.einsum('ij,ij->j', Wx, x)
+    return np.sqrt(norm2)
 
 
+class PODProjectorFromData:
+	"""
+	For constructing the proper orthogonal decomposition (POD) subspace 
+	"""
+	def __init__(self, Vh, M_output=None):
+		"""
+		Constructor
 
+		:param Vh: list of function spaces for the state, parameter, adjoint 
+		:type Vh: list[dl.FunctionSpace]
 
+		:param M_output: an optional weighting matrix for the output inner product space.
+			Will be mass matrix by default 
+		:type M_output: dl.Matrix or dl.PETScMatrix
+		"""
+		self.Vh = Vh 
+		self.mpi_comm = self.Vh[hp.STATE].mesh().mpi_comm()
+		assert self.mpi_comm.Get_size() == 1, "Works only for serial meshes"
+
+		if M_output is None:
+			# Chooses the mass matrix by default 
+			u_trial = dl.TrialFunction(self.Vh[hp.STATE])
+			u_test = dl.TestFunction(self.Vh[hp.STATE])
+
+			self.M = dl.PETScMatrix(self.mpi_comm)
+			dl.assemble(dl.inner(u_trial, u_test) * dl.dx, tensor=self.M)
+		else:
+			self.M = M_output 
+		
+		M_mat = dl.as_backend_type(self.M).mat()
+		row, col, val = M_mat.getValuesCSR()
+		self.M_csr = csr_matrix((val, col, row))
+
+	def construct_subspace(self, u_data, u_rank, shifted=True, method='hep', verify=False):
+		"""
+		Compute the matrix weighted POD using :code:`numpy` format
+
+		:param u_data: :code:`numpy` array with each row being a data vector
+		:type u_data: ndarray
+
+		:param u_rank: number of POD modes to compute 
+		:type u_rank: int 
+
+		:param shifted: Flag to shift the data about mean 
+		:type shifted: bool
+
+		:param method: Choice of method for solving the eigenvalue problem (ghep or hep)
+		:type method: str
+
+		:param verify: Flag to verify the accuracy of the POD approximation 
+		:type verify: bool
+
+		:returns: A tuple containing the following 
+
+		 - :code:`d`: array for eigenvalues of the POD problem
+		 - :code:`phi`: array for POD basis 
+		 - :code:`Mphi`: array for POD projectors
+		 - :code:`u_shift`: array for the shift, if specified. If unshifted, then returns an
+		 	array of zeros
+		"""
+		n_data = u_data.shape[0] 
+		assert u_rank <= n_data, "number of samples needs to be greater than rank of projector"
+
+		if shifted:
+			u_shift = np.mean(u_data, axis=0)
+			u_data = u_data - u_shift 
+			u_rank_verify = u_rank - 1 
+		else:
+			u_shift = np.zeros(u_data.shape[1])
+			u_rank_verify = u_rank 
+
+		u_data = u_data.T 
+
+		tpre0 = time.time()
+		if method == 'ghep':
+			print("Using GHEP")
+			# Mass matrix and inverse as linear operators
+			# Compute AA^T/n for the data matrix 
+			MX = self.M_csr @ u_data 
+			H = MX @ MX.T / n_data 
+			tpre1 = time.time()
+			print(f"Preprocessing took {tpre1 - tpre0:.3g} seconds")
+			# solve generalized eigenvalue problem 
+			print("Solving eigenvalue problem")
+			t0 = time.time()
+			d, phi = la.eigh(H, self.M_csr.toarray())
+			d = np.flipud(d)[:u_rank]
+			phi = np.fliplr(phi)[:, :u_rank]
+
+			t1 = time.time()
+			print("Post process eigenvectors to get POD modes")
+			Mphi = self.M_csr @ phi
+			t2 = time.time()
+			print("Done")
+			print(f"Eigenvalue solve took {t1 - t0:.3g} seconds")
+			print(f"Postprocessing by matrix solve took {t2 - t1:.3g} seconds")
+
+		elif method == 'sparse_ghep':
+			# Mass matrix and inverse as linear operators
+			M_lu_factors = spla.splu(self.M_csr.tocsc())
+			M_inv_op = spla.LinearOperator(shape=self.M_csr.shape, matvec=M_lu_factors.solve)
+			M_op = spla.aslinearoperator(self.M_csr)
+
+			# Compute AA^T/n for the data matrix 
+			H = u_data @ u_data.T / n_data
+			H_op = spla.aslinearoperator(H)
+			
+			tpre1 = time.time()
+			print(f"Preprocessing took {tpre1 - tpre0:.3g} seconds")
+			# solve generalized eigenvalue problem 
+			print("Solving eigenvalue problem")
+
+			t0 = time.time()
+
+			d, Mphi = spla.eigsh(H, k=u_rank, M=M_inv_op, Minv=M_op)
+			d = np.flipud(d)
+			Mphi = np.fliplr(Mphi)
+
+			t1 = time.time()
+			print("Post process eigenvectors to get POD modes")
+			phi = M_inv_op @ Mphi 
+			t2 = time.time()
+			print("Done")
+			print(f"Eigenvalue solve took {t1 - t0:.3g} seconds")
+			print(f"Postprocessing by matrix solve took {t2 - t1:.3g} seconds")
+			
+		elif method == 'hep':
+			t0 = time.time()
+			UtMU = u_data.T @ self.M_csr @ u_data 
+			t1 = time.time()
+
+			s, U = la.eigh(UtMU) 
+			d = np.flipud(s)[0:u_rank]/n_data
+			U = np.fliplr(U)[:,0:u_rank]
+
+			t2 = time.time()
+			phi = u_data @ U 
+			t3 = time.time()
+
+			phi = phi/weighted_l2_norm_vector(phi, self.M_csr)
+			Mphi = self.M_csr @ phi 
+			print(f"Preprocessing took {t1 - t0:.3g} seconds")
+			print(f"Eigenvalue solve took {t2 - t1:.3g} seconds")
+			print(f"Postprocessing took {t3 - t2:.3g} seconds")
+		else:
+			raise ValueError("Unavailable method")
+
+		if verify:
+			phi_orth_error = np.linalg.norm(phi[:,:u_rank_verify].T @ self.M_csr @ phi[:,:u_rank_verify] - np.eye(u_rank_verify))
+			print(f"Basis Orthogonality error: {phi_orth_error}")
+
+			Mphi_orth_error = np.linalg.norm(phi[:,:u_rank_verify].T @ Mphi[:,:u_rank_verify] - np.eye(u_rank_verify))
+			print(f"Basis-Projector Orthogonality error: {Mphi_orth_error}")
+
+			reconstruction_diff = u_data - (phi[:,:u_rank_verify] @ (Mphi[:,:u_rank_verify].T @ u_data))
+
+			error_with_data = weighted_l2_norm_vector(reconstruction_diff, self.M_csr)
+			norm_of_data = weighted_l2_norm_vector(u_data, self.M_csr)
+			rel_error_in_each_data = error_with_data/norm_of_data
+			print(f"Mean reconstruction error: {np.mean(rel_error_in_each_data):.3e}")
+			print(f"Max reconstruction error: {np.max(rel_error_in_each_data):.3e}")
+
+		return d, phi, Mphi, u_shift 
 
 
 
