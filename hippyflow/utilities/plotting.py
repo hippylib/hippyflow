@@ -14,13 +14,6 @@
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib import rc
 from pylab import *
-try:
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rc('text.latex', preamble=r'\usepackage{amsfonts, amsmath, mathrsfs}')
-except:
-    print('Error loading latex, will not be used in plots')
-    pass
 
 def spectrum_plot(lambdas, axis_label = ['i','$\lambda$','Spectrum'],\
                  ylims = None, out_name = None):
@@ -148,11 +141,6 @@ def plot_singular_values_with_std(s,s_std,title = 'Average singular values with 
 #     print('Error = ',np.linalg.norm(J - (U*s)@V))
 
     # Plot the singular values
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rc('text.latex', preamble=r'\usepackage{amsfonts}')
-
 
     fig, ax = plt.subplots()
     indices = np.arange(1,len(s)+1)
