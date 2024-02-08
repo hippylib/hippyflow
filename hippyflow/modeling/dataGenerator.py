@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2023, The University of Texas at Austin 
+# Copyright (c) 2020-2024, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -32,7 +32,7 @@ def data_generator_settings(settings = {}):
 
 	return settings
 
-class CustomDataGenerator:
+class DataGenerator:
 
 	def __init__(self,observable, prior, control_distribution = None,\
 					settings = data_generator_settings(), parRandom = None,\
@@ -141,7 +141,7 @@ class CustomDataGenerator:
 			################################################################################
 			# Derivative computations and saving
 
-			if derivatives[0] == 1:
+			if derivatives[0]:
 				t0_jacobian = time.time()
 				if output_basis is not None:
 					assert Phi is not None
@@ -174,7 +174,7 @@ class CustomDataGenerator:
 
 				jacobian_time = time.time() - t0_jacobian
 
-			if derivatives[1] == 1:
+			if derivatives[1]:
 				t0_control_jacobian = time.time()
 				if output_basis is not None:
 					assert Phi is not None
@@ -217,38 +217,88 @@ class CustomDataGenerator:
 							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
 
 
-	def compute_sketched_jacobians(self, derivatives, output_basis, mu_file, data_dir, compress=False, clean_up=False):
+	def compute_jacobians_in_subspace(self, derivatives, output_basis, data_file_name, data_dir, compress=True,\
+						 clean_up=True,compress_derivatives_only = True):
 		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_basis = output_basis)
-		Omega_m = sketching_arrays['Omega_m']
 		Phi = sketching_arrays['Phi']
-		JTPhi = sketching_arrays['JTPhi']
+		if derivatives[0]:
+			JTPhi = sketching_arrays['JTPhi']
+		if derivatives[1]:
+			JzTPhi = sketching_arrays['JzTPhi']
 
-		mu_data = np.load(mu_file)
-		m_data = mu_data['m_data']
-		u_data = mu_data['q_data']
+		data = np.load(data_dir+data_file_name)
+		m_data = data['m_data']
+		u_data = data['q_data']
+		if self.control_distribution is not None:
+			z_data = data['z_data']
 
 		N_data = m_data.shape[0]
-		os.makedirs(data_dir+'/J_data/',exist_ok=True)
+		if derivatives[0]:
+			os.makedirs(data_dir+'/J_data/',exist_ok=True)
+		if derivatives[1]:
+			os.makedirs(data_dir+'/Jz_data/',exist_ok=True)
 
 		for i in range(N_data):
 			m = m_data[i]
 			u = u_data[i]
 			self.m.set_local(m)
 			self.u.set_local(u)
-			
 			x = [self.u, self.m, None]
+			if self.control_distribution is not None:
+				z = z_data[i]
+				self.z.set_local(z)
+				x.append(self.z)
 			self.observable.setLinearizationPoint(x)
 			
-			JTPhi.zero()
-			hp.MatMvTranspmult(self.J,Phi,JTPhi)
-			JTPhi_np = hf.mv_to_dense(JTPhi)
-			np.save(data_dir+f'J_data/JTPhi{i}.npy', JTPhi_np)
+			if derivatives[0]:
+				JTPhi.zero()
+				hp.MatMvTranspmult(self.J,Phi,JTPhi)
+				JTPhi_np = hf.mv_to_dense(JTPhi)
+				np.save(data_dir+f'J_data/JTPhi{i}.npy', JTPhi_np)
+
+			if derivatives[1]:
+				JzTPhi.zero()
+				hp.MatMvTranspmult(self.Jz,Phi,JzTPhi)
+				JzTPhi_np = hf.mv_to_dense(JzTPhi)
+				np.save(data_dir+f'Jz_data/JzTPhi{i}.npy', JzTPhi_np)
+
+
+
 
 		################################################################################
 		if compress:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
-			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data, input_basis = None, output_basis = output_basis)
+			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data,\
+				 input_basis = None, output_basis = output_basis)
+
+
+	def two_step_generate(self,n_samples, pod_samples, derivatives = (0,0),\
+					data_dir = 'data/test/', compress = True, clean_up = True):
+		# Assert that this is a full state PDE problem.
+		assert type(self.observable.B) is hf.StateSpaceIdentityOperator
+		# Step 1. Generate m -> u(m) or (m,z) -> u(m,z)
+		self.generate(n_samples, derivatives = (0,0),data_dir = data_dir, compress = True, clean_up = False)
+		# Step 1.5 Compute POD
+		if self.control_distribution is not None:
+			data_file_name = 'mqz_data.npz'
+			all_data = np.load(data_dir+'mqz_data.npz')
+		else:
+			data_file_name = 'mq_data.npz'
+			all_data = np.load(data_dir+'mq_data.npz')
+		u_data = all_data['q_data'][:pod_samples]
+		POD = hf.PODProjectorFromData(Vh)
+		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,rank)
+		if True:
+			PsistarPsi = Mphi.T@phi
+			orth_error = np.linalg.norm(PsistarPsi - np.eye(PsistarPsi.shape[0]))
+			print('||Psi^*Psi - I|| = ',orth_error)
+			assert orth_error < 1e-5
+
+		# Step 2.
+		self.compute_jacobians_in_subspace(derivatives = derivatives, output_basis = phi,\
+						 data_file_name = data_file_name, data_dir = data_dir, compress_derivatives_only = True)
+
 
 
 	def initialize_sampling(self,derivatives,output_basis = None,input_basis = None):
@@ -352,9 +402,6 @@ class CustomDataGenerator:
 			if self.control_distribution is not None:
 				assert self.observable.problem.Cz is not None
 
-
-
-
 		return {'Omega_m':Omega_m, 'Omega_z': Omega_z,\
 				 'Phi': Phi, 'JTPhi':JTPhi, 'JzTPhi':JzTPhi,\
 				 'Psi': Psi, 'JPsi': JPsi}
@@ -362,7 +409,8 @@ class CustomDataGenerator:
 
 
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
-					has_z_data = False, input_basis = None, output_basis = None):
+					has_z_data = False, input_basis = None, output_basis = None,\
+					derivatives_only = False):
 
 	################################################################################
 	# Pre-processing and array allocations
@@ -388,7 +436,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 	ndata = 0
 
 	for file in all_files:
-		if 'm_sample' in file:
+		if file.startswith('m_sample') and file.endswith('.npy'):
 			index = int(file.split('m_sample_')[-1].split('.npy')[0])
 			ndata = max(ndata,index)
 			assert os.path.exists(data_path+'q_sample_'+str(index)+'.npy')
@@ -457,8 +505,11 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			Vz_data = np.zeros((ndata,dZ,rank))
 
 	for index in range(0,ndata):
-		m_data[index] = np.load(data_path+'/m_sample_'+str(index)+'.npy')
-		q_data[index] = np.load(data_path+'/q_sample_'+str(index)+'.npy')
+		if not derivatives_only:
+			m_data[index] = np.load(data_path+'/m_sample_'+str(index)+'.npy')
+			q_data[index] = np.load(data_path+'/q_sample_'+str(index)+'.npy')
+			if has_z_data:
+				z_data[index] = np.load(data_path+'/z_sample_'+str(index)+'.npy')
 
 
 		if derivatives[0]:
@@ -479,11 +530,11 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 				sigmaz_data[index] = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy')
 				Vz_data[index] = np.load(file_path+'/Jz_data/Vz_sample_'+str(index)+'.npy')
 
-
-	if has_z_data:
-		np.savez_compressed(file_path+'mqz_data.npz',m_data = m_data, q_data = q_data)
-	else:
-		np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
+	if not derivatives_only:
+		if has_z_data:
+			np.savez_compressed(file_path+'mqz_data.npz',m_data = m_data, q_data = q_data,z_data = z_data)
+		else:
+			np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
 	if derivatives[0]:
 		if compress_JTPhi:
 			np.savez_compressed(file_path+'JTPhi_data.npz',JTPhi_data = JTPhi_data,Phi = output_basis)
