@@ -721,7 +721,10 @@ class PODProjectorFromData:
 		 - :code:`u_shift`: array for the shift, if specified. If unshifted, then returns an
 		 	array of zeros
 		"""
-		n_data = u_data.shape[0] 
+		n_data, dim_u = u_data.shape
+
+		HEP_THRESHOLD = 0.2 # n_data/n_state < threshold -> suggest hep. Else, suggest GHEP
+
 		assert u_rank <= n_data, "number of samples needs to be greater than rank of projector"
 
 		if shifted:
@@ -737,7 +740,10 @@ class PODProjectorFromData:
 		tpre0 = time.time()
 		if method == 'ghep':
 			print("Using GHEP")
-			# Mass matrix and inverse as linear operators
+			if n_data < HEP_THRESHOLD * dim_u:
+				print(f"NOTE: number of data points {n_data} is much smaller than vector dimension {dim_u}."\
+					"Recommend using method==hep")
+
 			# Compute AA^T/n for the data matrix 
 			MX = self.M_csr @ u_data 
 			H = MX @ MX.T / n_data 
@@ -746,7 +752,9 @@ class PODProjectorFromData:
 			# solve generalized eigenvalue problem 
 			print("Solving eigenvalue problem")
 			t0 = time.time()
-			d, phi = la.eigh(H, self.M_csr.toarray())
+			d, phi = spla.eigsh(H, M=self.M_csr, k=u_rank) 
+            # Can also include a dense option if entire spectrum is needed
+			# d, phi = spla.eigh(H, self.M_csr.toarray())
 			d = np.flipud(d)[:u_rank]
 			phi = np.fliplr(phi)[:, :u_rank]
 
@@ -758,7 +766,12 @@ class PODProjectorFromData:
 			print(f"Eigenvalue solve took {t1 - t0:.3g} seconds")
 			print(f"Postprocessing by matrix solve took {t2 - t1:.3g} seconds")
 
-		elif method == 'sparse_ghep':
+		elif method == 'inverse_ghep':
+			print("Using inverse GHEP")
+			if n_data < HEP_THRESHOLD * dim_u:
+				print(f"NOTE: number of data points {n_data} is much smaller than vector dimension {dim_u}."\
+					"Recommend using method==hep")
+
 			# Mass matrix and inverse as linear operators
 			M_lu_factors = spla.splu(self.M_csr.tocsc())
 			M_inv_op = spla.LinearOperator(shape=self.M_csr.shape, matvec=M_lu_factors.solve)
@@ -788,6 +801,10 @@ class PODProjectorFromData:
 			print(f"Postprocessing by matrix solve took {t2 - t1:.3g} seconds")
 			
 		elif method == 'hep':
+			print("Using HEP")
+			if n_data > HEP_THRESHOLD * dim_u:
+				print(f"NOTE: number of data points {n_data} is comparable to vector dimension {dim_u}."\
+					"Recommend using method==ghep")
 			t0 = time.time()
 			UtMU = u_data.T @ self.M_csr @ u_data 
 			t1 = time.time()

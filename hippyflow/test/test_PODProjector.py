@@ -53,7 +53,7 @@ class TestPODProjectorFromData(unittest.TestCase):
 		"""
 		u_rank = 15
 		shift = True
-		methods = ['hep', 'ghep', 'sparse_ghep']
+		methods = ['hep', 'ghep', 'inverse_ghep']
 
 		for method in methods:
 			d, basis, projector, u_shift = self._construct_subspace(u_rank, shift, method)
@@ -71,7 +71,7 @@ class TestPODProjectorFromData(unittest.TestCase):
 		"""
 		u_rank = 15
 		shift = False
-		methods = ['hep', 'ghep', 'sparse_ghep']
+		methods = ['hep', 'ghep', 'inverse_ghep']
 
 		for method in methods:
 			d, basis, projector, u_shift = self._construct_subspace(u_rank, shift, method)
@@ -218,3 +218,7 @@ class TestPODProjectorFromData(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+
+
