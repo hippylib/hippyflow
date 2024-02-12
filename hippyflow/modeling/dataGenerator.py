@@ -20,6 +20,7 @@ import hippyflow as hf
 
 import time
 
+CONTROL = 3
 
 def data_generator_settings(settings = {}):
 	"""
@@ -88,7 +89,10 @@ class DataGenerator:
 					data_dir = 'data/test/', compress = True, clean_up = True):
 		"""
 		"""
-		os.makedirs(data_dir+'/mq_data/',exist_ok=True)
+		if self.control_distribution is not None:
+			os.makedirs(data_dir+'/mqz_data/',exist_ok=True)
+		else:
+			os.makedirs(data_dir+'/mq_data/',exist_ok=True)
 		if derivatives[0]:
 			os.makedirs(data_dir+'/J_data/',exist_ok=True)
 		if derivatives[1]:
@@ -129,12 +133,14 @@ class DataGenerator:
 			this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
 
-			np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
-			np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
-
-			if self.control_distribution is not None:
+			if self.control_distribution is None:
+				np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
+				np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
+			else:
+				np.save(data_dir+'mqz_data/m_sample_'+str(i)+'.npy',this_m)
+				np.save(data_dir+'mqz_data/q_sample_'+str(i)+'.npy',this_q)
 				this_z = self.z.get_local()
-				np.save(data_dir+'z_sample_'+str(i)+'.npy',this_z)
+				np.save(data_dir+'mqz_data/z_sample_'+str(i)+'.npy',this_z)
 
 			fwd_sample_time = time.time() -t0_samplei
 
@@ -273,10 +279,15 @@ class DataGenerator:
 				 input_basis = None, output_basis = output_basis)
 
 
-	def two_step_generate(self,n_samples, pod_samples, derivatives = (0,0),\
-					data_dir = 'data/test/', compress = True, clean_up = True):
+	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
+					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True):
 		# Assert that this is a full state PDE problem.
 		assert type(self.observable.B) is hf.StateSpaceIdentityOperator
+
+		if n_samples_pod is None:
+			# Could be risky
+			n_samples_pod = n_samples
+
 		# Step 1. Generate m -> u(m) or (m,z) -> u(m,z)
 		self.generate(n_samples, derivatives = (0,0),data_dir = data_dir, compress = True, clean_up = False)
 		# Step 1.5 Compute POD
@@ -286,9 +297,9 @@ class DataGenerator:
 		else:
 			data_file_name = 'mq_data.npz'
 			all_data = np.load(data_dir+'mq_data.npz')
-		u_data = all_data['q_data'][:pod_samples]
-		POD = hf.PODProjectorFromData(Vh)
-		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,rank)
+		u_data = all_data['q_data'][:n_samples_pod]
+		POD = hf.PODProjectorFromData(self.observable.problem.Vh)
+		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank)
 		if True:
 			PsistarPsi = Mphi.T@phi
 			orth_error = np.linalg.norm(PsistarPsi - np.eye(PsistarPsi.shape[0]))
@@ -461,9 +472,12 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 				assert JzTPhi_exists or Jzsvd_exists
 				compress_JzTPhi = compress_JzTPhi and JzTPhi_exists
 				compress_Jzsvd = compress_Jzsvd and Jzsvd_exists
+	if ndata == 0:
+		print('Some issue has arisen, no data found.')
+		raise
+
 	# Python indexing
 	ndata+=1
-
 	print('Total number of data = ',ndata)
 
 	dM = np.load(data_path+'/m_sample_'+str(index)+'.npy').shape[0]
@@ -497,7 +511,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			V_data = np.zeros((ndata,dM,rank))
 	if derivatives[1]:
 		if compress_JzTPhi:
-			JzTPhi_data = np.zeros((ndata,dQ,dZ))
+			JzTPhi_data = np.zeros((ndata,dZ,rQ))
 		if compress_Jsvd:
 			rank = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy').shape[1]
 			Uz_data = np.zeros((ndata,dQ,rank))
