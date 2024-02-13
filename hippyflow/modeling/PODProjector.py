@@ -803,7 +803,7 @@ class PODProjectorFromData:
 		elif method == 'hep':
 			print("Using HEP")
 			if n_data > HEP_THRESHOLD * dim_u:
-				print(f"NOTE: number of data points {n_data} is comparable to vector dimension {dim_u}."\
+				print(f"NOTE: number of data points {n_data} is comparable to vector dimension {dim_u}.\n"\
 					"Recommend using method==ghep")
 			t0 = time.time()
 			UtMU = u_data.T @ self.M_csr @ u_data 
