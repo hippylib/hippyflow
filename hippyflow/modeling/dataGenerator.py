@@ -106,8 +106,11 @@ class DataGenerator:
 		Omega_m = sketching_arrays['Omega_m']
 		Omega_z = sketching_arrays['Omega_z']
 		Phi = sketching_arrays['Phi']
-		JTPhi = sketching_arrays['JTPhi']
+		MPhi = sketching_arrays['MPhi']
+		JstarPhi = sketching_arrays['JstarPhi']
+		JzstarPhi = sketching_arrays['JzstarPhi']
 		Psi = sketching_arrays['Psi']
+		RPsi = sketching_arrays['RPsi']
 		JPsi = sketching_arrays['JPsi']
 
 		if self.settings['verbose']:
@@ -151,11 +154,11 @@ class DataGenerator:
 				t0_jacobian = time.time()
 				if output_basis is not None:
 					assert Phi is not None
-					assert JTPhi is not None
-					JTPhi.zero()
-					hp.MatMvTranspmult(self.J,Phi,JTPhi)
-					JTPhi_np = hf.mv_to_dense(JTPhi)
-					np.save(data_dir+'J_data/JTPhi'+str(i)+'.npy',JTPhi_np)
+					assert JstarPhi is not None
+					JstarPhi.zero()
+					hp.MatMvTranspmult(self.J,MPhi,JstarPhi)
+					JstarPhi_np = hf.mv_to_dense(JstarPhi)
+					np.save(data_dir+'J_data/JstarPhi'+str(i)+'.npy',JstarPhi_np)
 				elif input_basis is not None:
 					assert Psi is not None
 					assert JPsi is not None
@@ -183,12 +186,12 @@ class DataGenerator:
 			if derivatives[1]:
 				t0_control_jacobian = time.time()
 				if output_basis is not None:
-					assert Phi is not None
-					assert JzTPhi is not None
-					JzTPhi.zero()
-					hp.MatMvTranspmult(self.Jz,Phi,JzTPhi)
-					JzTPhi_np = hf.mv_to_dense(JzTPhi)
-					np.save(data_dir+'Jz_data/JzTPhi'+str(i)+'.npy',JzTPhi_np)
+					assert MPhi is not None
+					assert JzstarPhi is not None
+					JzstarPhi.zero()
+					hp.MatMvTranspmult(self.Jz,MPhi,JzstarPhi)
+					JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
+					np.save(data_dir+'Jz_data/JzstarPhi'+str(i)+'.npy',JzstarPhi_np)
 				else:
 					Omega_z.zero() # probably unecessary
 					hp.parRandom.normal(1.,Omega_z)
@@ -223,62 +226,6 @@ class DataGenerator:
 							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
 
 
-	def compute_jacobians_in_subspace(self, derivatives, output_basis, data_file_name, data_dir, compress=True,\
-						 clean_up=True,compress_derivatives_only = True):
-		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_basis = output_basis)
-		Phi = sketching_arrays['Phi']
-		if derivatives[0]:
-			JTPhi = sketching_arrays['JTPhi']
-		if derivatives[1]:
-			JzTPhi = sketching_arrays['JzTPhi']
-
-		data = np.load(data_dir+data_file_name)
-		m_data = data['m_data']
-		u_data = data['q_data']
-		if self.control_distribution is not None:
-			z_data = data['z_data']
-
-		N_data = m_data.shape[0]
-		if derivatives[0]:
-			os.makedirs(data_dir+'/J_data/',exist_ok=True)
-		if derivatives[1]:
-			os.makedirs(data_dir+'/Jz_data/',exist_ok=True)
-
-		for i in range(N_data):
-			m = m_data[i]
-			u = u_data[i]
-			self.m.set_local(m)
-			self.u.set_local(u)
-			x = [self.u, self.m, None]
-			if self.control_distribution is not None:
-				z = z_data[i]
-				self.z.set_local(z)
-				x.append(self.z)
-			self.observable.setLinearizationPoint(x)
-			
-			if derivatives[0]:
-				JTPhi.zero()
-				hp.MatMvTranspmult(self.J,Phi,JTPhi)
-				JTPhi_np = hf.mv_to_dense(JTPhi)
-				np.save(data_dir+f'J_data/JTPhi{i}.npy', JTPhi_np)
-
-			if derivatives[1]:
-				JzTPhi.zero()
-				hp.MatMvTranspmult(self.Jz,Phi,JzTPhi)
-				JzTPhi_np = hf.mv_to_dense(JzTPhi)
-				np.save(data_dir+f'Jz_data/JzTPhi{i}.npy', JzTPhi_np)
-
-
-
-
-		################################################################################
-		if compress:
-			print('Commencing compression'.center(80))
-			has_z_data = hasattr(self.observable.problem, 'Cz')
-			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data,\
-				 input_basis = None, output_basis = output_basis)
-
-
 	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
 					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True):
 		# Assert that this is a full state PDE problem.
@@ -307,22 +254,84 @@ class DataGenerator:
 			assert orth_error < 1e-5
 
 		# Step 2.
-		self.compute_jacobians_in_subspace(derivatives = derivatives, output_basis = phi,\
+		self.compute_jacobians_in_subspace(derivatives = derivatives, output_basis = phi, output_projector = Mphi,\
 						 data_file_name = data_file_name, data_dir = data_dir, compress_derivatives_only = True)
 
 
+	def compute_jacobians_in_subspace(self, derivatives, output_basis,  data_file_name, data_dir, output_projector = None,\
+			compress=True, clean_up=True,compress_derivatives_only = True):
+		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_basis = output_basis,\
+													output_projector = output_projector)
+		Phi = sketching_arrays['Phi']
+		MPhi = sketching_arrays['MPhi']
+		assert MPhi is not None
+		if derivatives[0]:
+			JstarPhi = sketching_arrays['JstarPhi']
+		if derivatives[1]:
+			JzstarPhi = sketching_arrays['JzstarPhi']
 
-	def initialize_sampling(self,derivatives,output_basis = None,input_basis = None):
+		data = np.load(data_dir+data_file_name)
+		m_data = data['m_data']
+		u_data = data['q_data']
+		if self.control_distribution is not None:
+			z_data = data['z_data']
+
+		N_data = m_data.shape[0]
+		if derivatives[0]:
+			os.makedirs(data_dir+'/J_data/',exist_ok=True)
+		if derivatives[1]:
+			os.makedirs(data_dir+'/Jz_data/',exist_ok=True)
+
+		for i in range(N_data):
+			m = m_data[i]
+			u = u_data[i]
+			self.m.set_local(m)
+			self.u.set_local(u)
+			x = [self.u, self.m, None]
+			if self.control_distribution is not None:
+				z = z_data[i]
+				self.z.set_local(z)
+				x.append(self.z)
+			self.observable.setLinearizationPoint(x)
+			
+			if derivatives[0]:
+				JstarPhi.zero()
+				hp.MatMvTranspmult(self.J,MPhi,JstarPhi)
+				JstarPhi_np = hf.mv_to_dense(JstarPhi)
+				np.save(data_dir+f'J_data/JstarPhi{i}.npy', JstarPhi_np)
+
+			if derivatives[1]:
+				JzstarPhi.zero()
+				hp.MatMvTranspmult(self.Jz,MPhi,JzstarPhi)
+				JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
+				np.save(data_dir+f'Jz_data/JzstarPhi{i}.npy', JzstarPhi_np)
+
+		################################################################################
+		if compress:
+			print('Commencing compression'.center(80))
+			has_z_data = hasattr(self.observable.problem, 'Cz')
+			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data,\
+				 input_basis = None, output_basis = output_basis)
+
+
+
+
+	def initialize_sampling(self,derivatives,input_basis = None,input_projector = None,\
+												output_basis = None,output_projector = None):
 		"""
 		"""
 		Omega_m = None
 		Omega_z = None
 		Phi = None
-		JTPhi = None
-		JzTPhi = None
+		MPhi = None	# the transpose of the projector
+		JstarPhi = None
+		JzstarPhi = None
+
 		# Psi is for the first parameter "m" and has no relation to z
 		Psi = None
+		RPsi = None # the transpose of the projector
 		JPsi = None
+		JzPsi = None
 		
 
 		setup_parameter_jacobian = bool(derivatives[0])
@@ -350,12 +359,18 @@ class DataGenerator:
 			self.dQ, self.dM = self.J.shape
 
 			if output_basis is not None:
+				if output_projector is None:
+					print('Potential issue with outputs if not using (.,.)_2 inner product\n')
+					print('Make sure to pass in a projector if using a different inner product')
+					output_projector = output_basis
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				Phi = hf.dense_to_mv_local(output_basis,qsample)
-				JTPhi = hp.MultiVector(self.m,Phi.nvec())
+				MPhi = hf.dense_to_mv_local(output_projector,qsample)
+				JstarPhi = hp.MultiVector(self.m,Phi.nvec())
 			elif input_basis is not None:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				Psi = hf.dense_to_mv_local(input_basis,self.m)
+				RPsi = hf.dense_to_mv_local(input_projector,self.m)
 				JPsi = hp.MultiVector(qsample,Psi.nvec())
 			else:
 				rM = self.settings['rM']
@@ -376,8 +391,19 @@ class DataGenerator:
 			if output_basis is not None:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				if Phi is None:
+					if output_projector is None:
+						print('Potential issue with outputs if not using (.,.)_2 inner product\n')
+						print('Make sure to pass in a projector if using a different inner product')
+						output_projector = output_basis
 					Phi = hf.dense_to_mv_local(output_basis,qsample)
-				JzTPhi = hp.MultiVector(self.z,Phi.nvec())
+					MPhi = hf.dense_to_mv_local(output_projector,qsample)
+				JzstarPhi = hp.MultiVector(self.z,Phi.nvec())
+			elif input_basis is not None:
+				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
+				if Psi is None:
+					Psi = hf.dense_to_mv_local(input_basis,self.m)
+					RPsi = hf.dense_to_mv_local(input_projector,self.m)
+				JzPsi = hp.MultiVector(qsample,Psi.nvec())
 			else:
 				rZ = self.settings['rZ']
 				oversample = self.settings['oversample']
@@ -388,6 +414,8 @@ class DataGenerator:
 				Omega_z = hp.MultiVector(control_vector,nvec_Omega_m)
 				hp.parRandom.normal(1.,Omega_z)
 
+		if derivatives[0] or derivatives[1]:
+			assert MPhi is not None
 
 		if self.dM is None:
 			self.dM = self.m.size()
@@ -414,13 +442,14 @@ class DataGenerator:
 				assert self.observable.problem.Cz is not None
 
 		return {'Omega_m':Omega_m, 'Omega_z': Omega_z,\
-				 'Phi': Phi, 'JTPhi':JTPhi, 'JzTPhi':JzTPhi,\
-				 'Psi': Psi, 'JPsi': JPsi}
+				 'Phi': Phi, 'MPhi': MPhi, 'JstarPhi':JstarPhi, 'JzstarPhi':JzstarPhi,\
+				 'Psi': Psi, 'RPsi':RPsi, 'JPsi': JPsi, 'JzPsi': JzPsi}
 
 
 
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 					has_z_data = False, input_basis = None, output_basis = None,\
+					input_projector = None, output_projector = None,\
 					derivatives_only = False):
 
 	################################################################################
@@ -428,13 +457,14 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 	# Booleans about what to save and assertions for safeguarding
 	if derivatives[0]:
-		compress_JTPhi = True
+		compress_JstarPhi = True
 		compress_JPsi = True
 		compress_Jsvd = True
 
 	if derivatives[1]:
 		assert has_z_data
-		compress_JzTPhi = True
+		compress_JzstarPhi = True
+		compress_JzPsi = True
 		compress_Jzsvd = True
 
 	if has_z_data:
@@ -454,23 +484,25 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			if has_z_data:
 				assert os.path.exists(data_path+'z_sample_'+str(index)+'.npy')
 			if derivatives[0]:
-				JTPhi_exists = os.path.exists(file_path+'/J_data/JTPhi'+str(index)+'.npy')
+				JstarPhi_exists = os.path.exists(file_path+'/J_data/JstarPhi'+str(index)+'.npy')
 				JPsi_exists = os.path.exists(file_path+'/J_data/JPsi'+str(index)+'.npy')
 				Jsvd_exists = os.path.exists(file_path+'/J_data/U_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/J_data/sigma_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/J_data/V_sample_'+str(index)+'.npy')
-				assert JTPhi_exists or Jsvd_exists or JPsi_exists
-				compress_JTPhi = compress_JTPhi and JTPhi_exists
+				assert JstarPhi_exists or Jsvd_exists or JPsi_exists
+				compress_JstarPhi = compress_JstarPhi and JstarPhi_exists
 				compress_JPsi = compress_JPsi and JPsi_exists
 				compress_Jsvd = compress_Jsvd and Jsvd_exists
 
 			if derivatives[1]:
-				JzTPhi_exists = os.path.exists(file_path+'/Jz_data/JzTPhi'+str(index)+'.npy')
+				JzstarPhi_exists = os.path.exists(file_path+'/Jz_data/JzstarPhi'+str(index)+'.npy')
+				JzPsi_exists = os.path.exists(file_path+'/Jz_data/JzPsi'+str(index)+'.npy')
 				Jzsvd_exists = os.path.exists(file_path+'/Jz_data/Uz_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy') and \
 								os.path.exists(file_path+'/Jz_data/Vz_sample_'+str(index)+'.npy')
-				assert JzTPhi_exists or Jzsvd_exists
-				compress_JzTPhi = compress_JzTPhi and JzTPhi_exists
+				assert JzstarPhi_exists or Jzsvd_exists
+				compress_JzstarPhi = compress_JzstarPhi and JzstarPhi_exists
+				compress_JzPsi = compress_JzPsi and JzPsi_exists
 				compress_Jzsvd = compress_Jzsvd and Jzsvd_exists
 	if ndata == 0:
 		print('Some issue has arisen, no data found.')
@@ -497,9 +529,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 	
 
 	if derivatives[0]:
-		if compress_JTPhi:
-			rQ = np.load(file_path+'/J_data/JTPhi'+str(index)+'.npy').shape[1]
-			JTPhi_data = np.zeros((ndata,dM,rQ))
+		if compress_JstarPhi:
+			rQ = np.load(file_path+'/J_data/JstarPhi'+str(index)+'.npy').shape[1]
+			JstarPhi_data = np.zeros((ndata,dM,rQ))
 		if compress_JPsi:
 			rM = np.load(file_path+'/J_data/JPsi'+str(index)+'.npy').shape[1]
 			JPsi_data = np.zeros((ndata,dQ,rM))
@@ -510,9 +542,13 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			sigma_data = np.zeros((ndata,rank))
 			V_data = np.zeros((ndata,dM,rank))
 	if derivatives[1]:
-		if compress_JzTPhi:
-			JzTPhi_data = np.zeros((ndata,dZ,rQ))
-		if compress_Jsvd:
+		if compress_JzstarPhi:
+			rQ = np.load(file_path+'/Jz_data/JzstarPhi'+str(index)+'.npy').shape[1]
+			JzstarPhi_data = np.zeros((ndata,dZ,rQ))
+		if compress_JzPsi:
+			rZ = np.load(file_path+'/Jz_data/JzPsi'+str(index)+'.npy').shape[1]
+			JzPsi_data = np.zeros((ndata,dQ,rZ))
+		if compress_Jzsvd:
 			rank = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy').shape[1]
 			Uz_data = np.zeros((ndata,dQ,rank))
 			sigmaz_data = np.zeros((ndata,rank))
@@ -527,8 +563,8 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 
 		if derivatives[0]:
-			if compress_JTPhi:
-				JTPhi_data[index] = np.load(file_path+'/J_data/JTPhi'+str(index)+'.npy')
+			if compress_JstarPhi:
+				JstarPhi_data[index] = np.load(file_path+'/J_data/JstarPhi'+str(index)+'.npy')
 			if compress_JPsi:
 				JPsi_data[index] = np.load(file_path+'/J_data/JPsi'+str(index)+'.npy')
 			if compress_Jsvd:
@@ -537,8 +573,10 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 				V_data[index] = np.load(file_path+'/J_data/V_sample_'+str(index)+'.npy')
 
 		if derivatives[1]:
-			if compress_JzTPhi:
-				JzTPhi_data[index] = np.load(file_path+'/Jz_data/JzTPhi'+str(index)+'.npy')
+			if compress_JzstarPhi:
+				JzstarPhi_data[index] = np.load(file_path+'/Jz_data/JzstarPhi'+str(index)+'.npy')
+			if compress_JzPsi:
+				JzPsi_data[index] = np.load(file_path+'/Jz_data/JzPsi'+str(index)+'.npy')
 			if compress_Jsvd:
 				Uz_data[index] = np.load(file_path+'/Jz_data/Uz_sample_'+str(index)+'.npy')
 				sigmaz_data[index] = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy')
@@ -550,16 +588,18 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		else:
 			np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
 	if derivatives[0]:
-		if compress_JTPhi:
-			np.savez_compressed(file_path+'JTPhi_data.npz',JTPhi_data = JTPhi_data,Phi = output_basis)
+		if compress_JstarPhi:
+			np.savez_compressed(file_path+'JstarPhi_data.npz',JstarPhi_data = JstarPhi_data,Phi = output_basis,MPhi = output_projector)
 		if compress_JPsi:
-			np.savez_compressed(file_path+'JPsi_data.npz',JPsi_data = JPsi_data,Psi = input_basis)
+			np.savez_compressed(file_path+'JPsi_data.npz',JPsi_data = JPsi_data,Psi = input_basis, input_projector = input_projector)
 		if compress_Jsvd:
 			np.savez_compressed(file_path+'Jsvd_data.npz',U_data = U_data, sigma_data =sigma_data, V_data = V_data)
 
 	if derivatives[1]:
-		if compress_JzTPhi:
-			np.savez_compressed(file_path+'JzTPhi_data.npz',JzTPhi_data = JzTPhi_data)
+		if compress_JzstarPhi:
+			np.savez_compressed(file_path+'JzstarPhi_data.npz',JzstarPhi_data = JzstarPhi_data,Phi = output_basis,MPhi = output_projector)
+		if compress_JzPsi:
+			np.savez_compressed(file_path+'JzPsi_data.npz',JzPsi_data = JzPsi_data,Psi = input_basis, input_projector = input_projector)
 		if compress_Jzsvd:
 			np.savez_compressed(file_path+'Jzsvd_data.npz',Uz_data = Uz_data, sigmaz_data =sigmaz_data, Vz_data = Vz_data)
 
