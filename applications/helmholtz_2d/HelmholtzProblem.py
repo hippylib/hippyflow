@@ -17,7 +17,7 @@
 import dolfin as dl
 import sys, os
 sys.path.append( os.environ.get('HIPPYLIB_PATH'))
-from hippylib import *
+import hippylib as hp
 
 class PML:
     def __init__(self, mesh, box, box_pml, A):
@@ -54,12 +54,12 @@ class SingleSourceHelmholtzProblem(PDEProblem):
         self.rhs_fwd = self.generate_state()
         
         if type(sources_loc) is dl.Point:
-            ps0 = dl.PointSource(self.Vh[STATE].sub(0), sources_loc, 1.)
+            ps0 = dl.PointSource(self.Vh[hp.STATE].sub(0), sources_loc, 1.)
             ps0.apply(self.rhs_fwd)
 
         else:
             for source in sources_loc:
-                ps0 = dl.PointSource(self.Vh[STATE].sub(0), source, 1.)
+                ps0 = dl.PointSource(self.Vh[hp.STATE].sub(0), source, 1.)
                 ps0.apply(self.rhs_fwd)
 
         self.A  = None
@@ -116,11 +116,11 @@ class SingleSourceHelmholtzProblem(PDEProblem):
         
     def generate_state(self):
         """ return a vector in the shape of the state """
-        return dl.Function(self.Vh[STATE]).vector()
+        return dl.Function(self.Vh[hp.STATE]).vector()
     
     def generate_parameter(self):
         """ return a vector in the shape of the parameter """
-        return dl.Function(self.Vh[PARAMETER]).vector()
+        return dl.Function(self.Vh[hp.PARAMETER]).vector()
     
     def init_parameter(self, m):
         """ initialize the parameter """
@@ -132,9 +132,9 @@ class SingleSourceHelmholtzProblem(PDEProblem):
         Given m, find u such that
         \delta_p F(u,m,p;\hat_p) = 0 \for all \hat_p"""
         
-        u = dl.TrialFunction(self.Vh[STATE])
-        m = vector2Function(x[PARAMETER], self.Vh[PARAMETER])
-        p = dl.TestFunction(self.Vh[ADJOINT])
+        u = dl.TrialFunction(self.Vh[hp.STATE])
+        m = hp.vector2Function(x[hp.PARAMETER], self.Vh[hp.PARAMETER])
+        p = dl.TestFunction(self.Vh[hp.ADJOINT])
         A = dl.assemble( self.varf_handler(u,m,p) )
         
         self.solver.set_operator(A)
@@ -146,9 +146,9 @@ class SingleSourceHelmholtzProblem(PDEProblem):
             Given m, u; find p such that
             \delta_u F(u,m,p;\hat_u) = 0 \for all \hat_u
         """
-        u = dl.TestFunction(self.Vh[STATE])
-        m = vector2Function(x[PARAMETER], self.Vh[PARAMETER])
-        p = dl.TrialFunction(self.Vh[ADJOINT])
+        u = dl.TestFunction(self.Vh[hp.STATE])
+        m = hp.vector2Function(x[hp.PARAMETER], self.Vh[hp.PARAMETER])
+        p = dl.TrialFunction(self.Vh[hp.ADJOINT])
         Aadj = dl.assemble( self.varf_handler(u,m,p) )
 
         self.solver.set_operator(Aadj)
@@ -156,10 +156,10 @@ class SingleSourceHelmholtzProblem(PDEProblem):
      
     def evalGradientParameter(self, x, out):
         """Given u,m,p; eval \delta_m F(u,m,p; \hat_m) \for all \hat_m """
-        u = vector2Function(x[STATE], self.Vh[STATE])
-        m = vector2Function(x[PARAMETER], self.Vh[PARAMETER])
-        p = vector2Function(x[ADJOINT], self.Vh[ADJOINT])
-        dm = dl.TestFunction(self.Vh[PARAMETER])
+        u = hp.vector2Function(x[hp.STATE], self.Vh[hp.STATE])
+        m = hp.vector2Function(x[hp.PARAMETER], self.Vh[hp.PARAMETER])
+        p = hp.vector2Function(x[hp.ADJOINT], self.Vh[hp.ADJOINT])
+        dm = dl.TestFunction(self.Vh[hp.PARAMETER])
         res_form = self.varf_handler(u,m,p)
         out.zero()
         dl.assemble( dl.derivative(res_form, m, dm), tensor=out)
@@ -167,9 +167,9 @@ class SingleSourceHelmholtzProblem(PDEProblem):
     def setLinearizationPoint(self,x, gn_approx):
         """ Set the values of the state and parameter
             for the incremental Fwd and Adj solvers """
-        u = vector2Function(x[STATE], self.Vh[STATE])
-        m = vector2Function(x[PARAMETER], self.Vh[PARAMETER])
-        p = vector2Function(x[ADJOINT], self.Vh[ADJOINT])
+        u = hp.vector2Function(x[hp.STATE], self.Vh[hp.STATE])
+        m = hp.vector2Function(x[hp.PARAMETER], self.Vh[hp.PARAMETER])
+        p = hp.vector2Function(x[hp.ADJOINT], self.Vh[hp.ADJOINT])
         x_fun = [u,m,p]
         
         f_form = self.varf_handler(u,m,p)
@@ -178,9 +178,9 @@ class SingleSourceHelmholtzProblem(PDEProblem):
         for i in range(3):
             g_form[i] = dl.derivative(f_form, x_fun[i])
             
-        self.A = dl.assemble(dl.derivative(g_form[ADJOINT],u))
-        self.At = dl.assemble(dl.derivative(g_form[STATE],p))
-        self.C = dl.assemble(dl.derivative(g_form[ADJOINT],m))
+        self.A = dl.assemble(dl.derivative(g_form[hp.ADJOINT],u))
+        self.At = dl.assemble(dl.derivative(g_form[hp.STATE],p))
+        self.C = dl.assemble(dl.derivative(g_form[hp.ADJOINT],m))
         
         self.solver_fwd_inc.set_operator(self.A)
         self.solver_adj_inc.set_operator(self.At)
@@ -190,9 +190,9 @@ class SingleSourceHelmholtzProblem(PDEProblem):
             self.Wuu = None
             self.Wmm = None
         else:
-            self.Wmu = dl.assemble(dl.derivative(g_form[PARAMETER],u))
-            self.Wuu = dl.assemble(dl.derivative(g_form[STATE],u))
-            self.Wmm = dl.assemble(dl.derivative(g_form[PARAMETER],m))
+            self.Wmu = dl.assemble(dl.derivative(g_form[hp.PARAMETER],u))
+            self.Wuu = dl.assemble(dl.derivative(g_form[hp.STATE],u))
+            self.Wmm = dl.assemble(dl.derivative(g_form[hp.PARAMETER],m))
         
                 
     def solveIncremental(self, out, rhs, is_adj):
@@ -219,11 +219,11 @@ class SingleSourceHelmholtzProblem(PDEProblem):
             \delta_{ij} F(u,a,p; \hat_i, \tilde_j) in the direction \tilde_j = dir for all \hat_i
         """
         KKT = {}
-        KKT[STATE,STATE] = self.Wuu
-        KKT[PARAMETER, STATE] = self.Wmu
-        KKT[PARAMETER, PARAMETER] = self.Wmm
-        KKT[ADJOINT, STATE] = self.A
-        KKT[ADJOINT, PARAMETER] = self.C
+        KKT[hp.STATE,hp.STATE] = self.Wuu
+        KKT[hp.PARAMETER, hp.STATE] = self.Wmu
+        KKT[hp.PARAMETER, hp.PARAMETER] = self.Wmm
+        KKT[hp.ADJOINT, hp.STATE] = self.A
+        KKT[hp.ADJOINT, hp.PARAMETER] = self.C
         
         if i >= j:
             KKT[i,j].mult(dir, out)
@@ -232,10 +232,11 @@ class SingleSourceHelmholtzProblem(PDEProblem):
             
             
     def _createLUSolver(self):
-        if dlversion() <= (1,6,0):
-            return dl.PETScLUSolver()
-        else:
-            return dl.PETScLUSolver(self.Vh[STATE].mesh().mpi_comm() )
+        # if dlversion() <= (1,6,0):
+        #     return dl.PETScLUSolver()
+        # else:
+        #     return dl.PETScLUSolver(self.Vh[STATE].mesh().mpi_comm() )
+        return PETScLUSolver(self.Vh[STATE].mesh().mpi_comm())
                 
 
         

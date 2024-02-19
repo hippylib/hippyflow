@@ -17,6 +17,8 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
+from .dataGenerator import DataGenerator, compress_dataset
+
 from .controlJacobian import ObservableControlJacobian
 
 from .fullStateObservable import StateSpaceIdentityOperator
@@ -37,7 +39,7 @@ from .observable import LinearStateObservable, DomainRestrictedOperator, hippyli
 
 from .operatorWrappers import npToDolfinOperator, MeanJTJfromDataOperator
 
-from .PODProjector import PODProjector, PODParameterList
+from .PODProjector import PODProjector, PODParameterList, PODProjectorFromData
 
 from .priorPreconditionedProjector import PriorPreconditionedProjector
 

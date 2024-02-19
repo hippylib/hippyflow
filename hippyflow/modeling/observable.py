@@ -84,6 +84,9 @@ class LinearStateObservable:
 		self.n_fwd_solve = 0
 		self.n_adj_solve = 0
 		self.n_inc_solve = 0
+
+		if hasattr(self.problem,'parameter_projection'):
+			self.out1 = self.problem.generate_parameter()
 				
 	def mpi_comm(self):
 		return self.B.mpi_comm()
@@ -269,7 +272,12 @@ class LinearStateObservable:
 			
 		.. note:: This routine assumes that :code:`out` has the correct shape.
 		"""
-		self.problem.apply_ij(hp.ADJOINT,hp.PARAMETER, dm, out)
+		if hasattr(self.problem,'parameter_projection'):
+			dm1 = self.problem.parameter_projection(dm)
+			self.problem.apply_ij(hp.ADJOINT,hp.PARAMETER, dm1, out)
+		else:
+			self.problem.apply_ij(hp.ADJOINT,hp.PARAMETER, dm, out)
+
 	
 	def applyCt(self, dp, out):
 		"""
@@ -281,7 +289,12 @@ class LinearStateObservable:
 			
 		..note:: This routine assumes that :code:`out` has the correct shape.
 		"""
-		self.problem.apply_ij(hp.PARAMETER,hp.ADJOINT, dp, out)
+		if hasattr(self.problem,'parameter_projection'):
+			self.out1.zero()
+			self.problem.apply_ij(hp.PARAMETER,hp.ADJOINT, dp, self.out1)
+			self.problem.transmult_M(self.out1,out)
+		else:
+			self.problem.apply_ij(hp.PARAMETER,hp.ADJOINT, dp, out)
 
 	def applyCz(self, dz, out):
 		"""
