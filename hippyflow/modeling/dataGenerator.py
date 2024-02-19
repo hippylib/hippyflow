@@ -90,7 +90,7 @@ class DataGenerator:
 		"""
 		"""
 		if self.control_distribution is not None:
-			os.makedirs(data_dir+'/mqz_data/',exist_ok=True)
+			os.makedirs(data_dir+'/mzq_data/',exist_ok=True)
 		else:
 			os.makedirs(data_dir+'/mq_data/',exist_ok=True)
 		if derivatives[0]:
@@ -140,10 +140,10 @@ class DataGenerator:
 				np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
 				np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
 			else:
-				np.save(data_dir+'mqz_data/m_sample_'+str(i)+'.npy',this_m)
-				np.save(data_dir+'mqz_data/q_sample_'+str(i)+'.npy',this_q)
+				np.save(data_dir+'mzq_data/m_sample_'+str(i)+'.npy',this_m)
+				np.save(data_dir+'mzq_data/q_sample_'+str(i)+'.npy',this_q)
 				this_z = self.z.get_local()
-				np.save(data_dir+'mqz_data/z_sample_'+str(i)+'.npy',this_z)
+				np.save(data_dir+'mzq_data/z_sample_'+str(i)+'.npy',this_z)
 
 			fwd_sample_time = time.time() -t0_samplei
 
@@ -239,8 +239,8 @@ class DataGenerator:
 		self.generate(n_samples, derivatives = (0,0),data_dir = data_dir, compress = True, clean_up = False)
 		# Step 1.5 Compute POD
 		if self.control_distribution is not None:
-			data_file_name = 'mqz_data.npz'
-			all_data = np.load(data_dir+'mqz_data.npz')
+			data_file_name = 'mzq_data.npz'
+			all_data = np.load(data_dir+'mzq_data.npz')
 		else:
 			data_file_name = 'mq_data.npz'
 			all_data = np.load(data_dir+'mq_data.npz')
@@ -468,7 +468,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		compress_Jzsvd = True
 
 	if has_z_data:
-		data_path = file_path+'/mqz_data/'
+		data_path = file_path+'/mzq_data/'
 	else:
 		data_path = file_path+'/mq_data/'
 	
@@ -584,7 +584,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 	if not derivatives_only:
 		if has_z_data:
-			np.savez_compressed(file_path+'mqz_data.npz',m_data = m_data, q_data = q_data,z_data = z_data)
+			np.savez_compressed(file_path+'mzq_data.npz',m_data = m_data, q_data = q_data,z_data = z_data)
 		else:
 			np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
 	if derivatives[0]:
