@@ -35,13 +35,14 @@ def data_generator_settings(settings = {}):
 
 class DataGenerator:
 
-	def __init__(self,observable, prior, control_distribution = None,\
+	def __init__(self,observable, prior, misfit=None, control_distribution = None,\
 					settings = data_generator_settings(), parRandom = None,\
 					mesh_constructor_comm = None):
 		"""
 		"""
 		self.observable = observable
 		self.prior = prior
+		self.misfit = misfit
 		self.control_distribution = control_distribution
 
 		# Constructor for mesh-partitioned vectors
@@ -86,7 +87,8 @@ class DataGenerator:
 
 	def generate(self, n_samples, derivatives = (0,0),\
 					output_basis = None, input_basis = None,\
-					data_dir = 'data/test/', compress = True, clean_up = True):
+					n_data_per_sample=1,\
+					data_dir = 'data/test/',  compress = True, clean_up = True):
 		"""
 		"""
 		if self.control_distribution is not None:
@@ -119,7 +121,7 @@ class DataGenerator:
 		for i in range(n_samples):
 			t0_samplei = time.time()
 			################################################################################
-			# Sample forward map m -> q(m) or m,z -> q(m,z) and save
+			# Sample forward map m -> q(m) or m,z -> q(m,z), also sample y = q + noise, y can be several or just 1 data sample and save
 			self.parRandom.normal(1,self.noise)
 
 			self.m.zero()
@@ -136,9 +138,22 @@ class DataGenerator:
 			this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
 
+			# generate observations
+			if self.misfit is not None:
+				this_y = []
+				for _ in range(n_data_per_sample):
+					d = dl.Vector(self.misfit.B.mpi_comm())
+					d.set_local(this_q)
+					noise_std = np.sqrt(self.misfit.noise_variance)
+					self.parRandom.normal_perturb(noise_std, d)
+					this_y.append(d.get_local())
+
+
 			if self.control_distribution is None:
 				np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
 				np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
+				if self.misfit is not None:
+					np.save(data_dir+'mq_data/y_samples_'+str(i)+'.npy',np.array(this_y)) #N_samples x dY
 			else:
 				np.save(data_dir+'mzq_data/m_sample_'+str(i)+'.npy',this_m)
 				np.save(data_dir+'mzq_data/q_sample_'+str(i)+'.npy',this_q)
@@ -446,7 +461,6 @@ class DataGenerator:
 				 'Psi': Psi, 'RPsi':RPsi, 'JPsi': JPsi, 'JzPsi': JzPsi}
 
 
-
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 					has_z_data = False, input_basis = None, output_basis = None,\
 					input_projector = None, output_projector = None,\
@@ -481,6 +495,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			index = int(file.split('m_sample_')[-1].split('.npy')[0])
 			ndata = max(ndata,index)
 			assert os.path.exists(data_path+'q_sample_'+str(index)+'.npy')
+			if self.misfit is not None:
+				assert os.path.exists(data_path+'y_samples_'+str(index)+'.npy')
+
 			if has_z_data:
 				assert os.path.exists(data_path+'z_sample_'+str(index)+'.npy')
 			if derivatives[0]:
@@ -514,10 +531,18 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 	dM = np.load(data_path+'/m_sample_'+str(index)+'.npy').shape[0]
 	dQ = np.load(data_path+'/q_sample_'+str(index)+'.npy').shape[0]
+	if self.misfit is not None:
+		N_iid, dY = np.load(data_path+'/m_samples_'+str(index)+'.npy').shape
+
 	m_data = np.zeros((ndata,dM))
 	q_data = np.zeros((ndata,dQ))
+	if self.misfit is not None:
+		y_data = np.zeros((ndata, N_iid, dY))
 	print('dM = ',dM)
 	print('dQ = ',dQ)
+	if self.misfit is not None:
+		print('dY = ',dY)
+		print('num i.i.d. data samples = ',N_iid)
 
 	if has_z_data:
 		dZ = np.load(data_path+'/z_sample_'+str(index)+'.npy').shape[0]
@@ -558,6 +583,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		if not derivatives_only:
 			m_data[index] = np.load(data_path+'/m_sample_'+str(index)+'.npy')
 			q_data[index] = np.load(data_path+'/q_sample_'+str(index)+'.npy')
+			if self.misfit is not None:
+				y_data[index] = np.load(data_path+'/y_samples_'+str(index)+'.npy')
+
 			if has_z_data:
 				z_data[index] = np.load(data_path+'/z_sample_'+str(index)+'.npy')
 
@@ -587,6 +615,8 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			np.savez_compressed(file_path+'mzq_data.npz',m_data = m_data, q_data = q_data,z_data = z_data)
 		else:
 			np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
+			np.savez_compressed(file_path+'mqy_data.npz',m_data = m_data, q_data = q_data, y_data = y_data)
+
 	if derivatives[0]:
 		if compress_JstarPhi:
 			np.savez_compressed(file_path+'JstarPhi_data.npz',JstarPhi_data = JstarPhi_data,Phi = output_basis,MPhi = output_projector)
