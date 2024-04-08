@@ -141,8 +141,9 @@ class DataGenerator:
 			# generate observations
 			if self.misfit is not None:
 				this_y = []
+				d = dl.Vector(self.misfit.B.mpi_comm())
+				self.misfit.B.init_vector(d, 0)
 				for _ in range(n_data_per_sample):
-					d = dl.Vector(self.misfit.B.mpi_comm())
 					d.set_local(this_q)
 					noise_std = np.sqrt(self.misfit.noise_variance)
 					self.parRandom.normal_perturb(noise_std, d)
@@ -238,7 +239,7 @@ class DataGenerator:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up,\
-							has_z_data = has_z_data, input_basis = input_basis, output_basis = output_basis)
+							has_z_data = has_z_data, has_y_data=(self.misfit is not None), input_basis = input_basis, output_basis = output_basis)
 
 
 	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
@@ -462,7 +463,7 @@ class DataGenerator:
 
 
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
-					has_z_data = False, input_basis = None, output_basis = None,\
+					has_z_data = False, has_y_data=False, input_basis = None, output_basis = None,\
 					input_projector = None, output_projector = None,\
 					derivatives_only = False):
 
@@ -482,9 +483,9 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		compress_Jzsvd = True
 
 	if has_z_data:
-		data_path = file_path+'/mzq_data/'
+		data_path = file_path+'mzq_data/'
 	else:
-		data_path = file_path+'/mq_data/'
+		data_path = file_path+'mq_data/'
 	
 	all_files = os.listdir(data_path)
 	
@@ -495,28 +496,27 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			index = int(file.split('m_sample_')[-1].split('.npy')[0])
 			ndata = max(ndata,index)
 			assert os.path.exists(data_path+'q_sample_'+str(index)+'.npy')
-			if self.misfit is not None:
+			if has_y_data:
 				assert os.path.exists(data_path+'y_samples_'+str(index)+'.npy')
-
 			if has_z_data:
 				assert os.path.exists(data_path+'z_sample_'+str(index)+'.npy')
 			if derivatives[0]:
-				JstarPhi_exists = os.path.exists(file_path+'/J_data/JstarPhi'+str(index)+'.npy')
-				JPsi_exists = os.path.exists(file_path+'/J_data/JPsi'+str(index)+'.npy')
-				Jsvd_exists = os.path.exists(file_path+'/J_data/U_sample_'+str(index)+'.npy') and \
-								os.path.exists(file_path+'/J_data/sigma_sample_'+str(index)+'.npy') and \
-								os.path.exists(file_path+'/J_data/V_sample_'+str(index)+'.npy')
+				JstarPhi_exists = os.path.exists(file_path+'J_data/JstarPhi'+str(index)+'.npy')
+				JPsi_exists = os.path.exists(file_path+'J_data/JPsi'+str(index)+'.npy')
+				Jsvd_exists = os.path.exists(file_path+'J_data/U_sample_'+str(index)+'.npy') and \
+								os.path.exists(file_path+'J_data/sigma_sample_'+str(index)+'.npy') and \
+								os.path.exists(file_path+'J_data/V_sample_'+str(index)+'.npy')
 				assert JstarPhi_exists or Jsvd_exists or JPsi_exists
 				compress_JstarPhi = compress_JstarPhi and JstarPhi_exists
 				compress_JPsi = compress_JPsi and JPsi_exists
 				compress_Jsvd = compress_Jsvd and Jsvd_exists
 
 			if derivatives[1]:
-				JzstarPhi_exists = os.path.exists(file_path+'/Jz_data/JzstarPhi'+str(index)+'.npy')
-				JzPsi_exists = os.path.exists(file_path+'/Jz_data/JzPsi'+str(index)+'.npy')
-				Jzsvd_exists = os.path.exists(file_path+'/Jz_data/Uz_sample_'+str(index)+'.npy') and \
-								os.path.exists(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy') and \
-								os.path.exists(file_path+'/Jz_data/Vz_sample_'+str(index)+'.npy')
+				JzstarPhi_exists = os.path.exists(file_path+'Jz_data/JzstarPhi'+str(index)+'.npy')
+				JzPsi_exists = os.path.exists(file_path+'Jz_data/JzPsi'+str(index)+'.npy')
+				Jzsvd_exists = os.path.exists(file_path+'Jz_data/Uz_sample_'+str(index)+'.npy') and \
+								os.path.exists(file_path+'Jz_data/sigmaz_sample_'+str(index)+'.npy') and \
+								os.path.exists(file_path+'Jz_data/Vz_sample_'+str(index)+'.npy')
 				assert JzstarPhi_exists or Jzsvd_exists
 				compress_JzstarPhi = compress_JzstarPhi and JzstarPhi_exists
 				compress_JzPsi = compress_JzPsi and JzPsi_exists
@@ -529,23 +529,23 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 	ndata+=1
 	print('Total number of data = ',ndata)
 
-	dM = np.load(data_path+'/m_sample_'+str(index)+'.npy').shape[0]
-	dQ = np.load(data_path+'/q_sample_'+str(index)+'.npy').shape[0]
-	if self.misfit is not None:
-		N_iid, dY = np.load(data_path+'/m_samples_'+str(index)+'.npy').shape
+	dM = np.load(data_path+'m_sample_'+str(index)+'.npy').shape[0]
+	dQ = np.load(data_path+'q_sample_'+str(index)+'.npy').shape[0]
+	if has_y_data:
+		N_iid, dY = np.load(data_path+'y_samples_'+str(index)+'.npy').shape
 
 	m_data = np.zeros((ndata,dM))
 	q_data = np.zeros((ndata,dQ))
-	if self.misfit is not None:
+	if has_y_data:
 		y_data = np.zeros((ndata, N_iid, dY))
 	print('dM = ',dM)
 	print('dQ = ',dQ)
-	if self.misfit is not None:
+	if has_y_data:
 		print('dY = ',dY)
 		print('num i.i.d. data samples = ',N_iid)
 
 	if has_z_data:
-		dZ = np.load(data_path+'/z_sample_'+str(index)+'.npy').shape[0]
+		dZ = np.load(data_path+'z_sample_'+str(index)+'.npy').shape[0]
 		z_data = np.zeros((ndata,dZ))
 		print('dZ = ',dZ)
 
@@ -583,8 +583,8 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		if not derivatives_only:
 			m_data[index] = np.load(data_path+'/m_sample_'+str(index)+'.npy')
 			q_data[index] = np.load(data_path+'/q_sample_'+str(index)+'.npy')
-			if self.misfit is not None:
-				y_data[index] = np.load(data_path+'/y_samples_'+str(index)+'.npy')
+			if has_y_data:
+				y_data[index] = np.load(data_path+'y_samples_'+str(index)+'.npy')
 
 			if has_z_data:
 				z_data[index] = np.load(data_path+'/z_sample_'+str(index)+'.npy')
