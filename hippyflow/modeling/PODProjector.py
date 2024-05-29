@@ -748,13 +748,17 @@ class PODProjectorFromData:
 
 			# Compute AA^T/n for the data matrix 
 			MX = self.M_csr @ u_data 
-			H = MX @ MX.T / n_data 
+
+			H_shape = (MX.shape[0], MX.shape[0])
+			H_matvec = lambda x : MX @ (MX.T @ x) / n_data 
+			H_op = spla.LinearOperator(matvec=H_matvec, shape=H_shape)
+			# H = MX @ MX.T / n_data 
 			tpre1 = time.time()
 			print(f"Preprocessing took {tpre1 - tpre0:.3g} seconds")
 			# solve generalized eigenvalue problem 
 			print("Solving eigenvalue problem")
 			t0 = time.time()
-			d, phi = spla.eigsh(H, M=self.M_csr, k=u_rank) 
+			d, phi = spla.eigsh(H_op, M=self.M_csr, k=u_rank) 
             # Can also include a dense option if entire spectrum is needed
 			# d, phi = spla.eigh(H, self.M_csr.toarray())
 			d = np.flipud(d)[:u_rank]
