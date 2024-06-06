@@ -261,8 +261,8 @@ class DataGenerator:
 		os.makedirs(data_dir+'/POD/',exist_ok=True)
 		Phi_np = hf.mv_to_dense(Phi)
 		MPhi_np = hf.mv_to_dense(MPhi)
-		np.save(data_dir+f'J_data/POD/Phi.npy',Phi_np)
-		np.save(data_dir+f'J_data/POD/MPhi.npy',MPhi_np)
+		np.save(data_dir+f'J_data/POD/POD_decoder.npy',Phi_np)
+		np.save(data_dir+f'J_data/POD/POD_encoder.npy',MPhi_np)
 		np.save(data_dir+f'J_data/POD/d_POD.npy',d_POD)
 
 		# Step 2.
