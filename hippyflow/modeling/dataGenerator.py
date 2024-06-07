@@ -240,6 +240,8 @@ class DataGenerator:
 			# Could be risky
 			n_samples_pod = n_samples
 
+		assert pod_rank <= n_samples_pod, "number of samples for POD needs to be greater than rank of projector"
+
 		# Step 1. Generate m -> u(m) or (m,z) -> u(m,z)
 		self.generate(n_samples, derivatives = (0,0),data_dir = data_dir, compress = True, clean_up = False)
 		# Step 1.5 Compute POD
