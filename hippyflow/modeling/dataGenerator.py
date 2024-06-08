@@ -232,7 +232,13 @@ class DataGenerator:
 
 
 	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
-					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True):
+					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True,\
+					pod_method = 'hep',pod_shifted = True):
+		"""
+		Texas two-step generate. 
+		Step 1: Generate forward map evaluation to compute compressed POD basis
+		Step 2: Jacobian solves at the forward map linearization points in the POD basis
+		"""
 		# Assert that this is a full state PDE problem.
 		assert type(self.observable.B) is hf.StateSpaceIdentityOperator
 
@@ -253,19 +259,20 @@ class DataGenerator:
 			all_data = np.load(data_dir+'mq_data.npz')
 		u_data = all_data['q_data'][:n_samples_pod]
 		POD = hf.PODProjectorFromData(self.observable.problem.Vh)
-		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank)
+		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank,method = pod_method,verify = True)
 		if True:
-			PsistarPsi = Mphi.T@phi
+			u_rank_verify = pod_rank
+			if pod_shifted:
+				u_rank_verify -=1
+			PsistarPsi = Mphi[:,:u_rank_verify].T@phi[:,:u_rank_verify]
 			orth_error = np.linalg.norm(PsistarPsi - np.eye(PsistarPsi.shape[0]))
 			print('||Psi^*Psi - I|| = ',orth_error)
 			assert orth_error < 1e-5
 		# Save POD
 		os.makedirs(data_dir+'/POD/',exist_ok=True)
-		Phi_np = hf.mv_to_dense(Phi)
-		MPhi_np = hf.mv_to_dense(MPhi)
-		np.save(data_dir+f'J_data/POD/POD_decoder.npy',Phi_np)
-		np.save(data_dir+f'J_data/POD/POD_encoder.npy',MPhi_np)
-		np.save(data_dir+f'J_data/POD/d_POD.npy',d_POD)
+		np.save(data_dir+f'/POD/POD_decoder.npy',phi)
+		np.save(data_dir+f'/POD/POD_encoder.npy',Mphi)
+		np.save(data_dir+f'/POD/d_POD.npy',d_POD)
 
 		# Step 2.
 		self.compute_jacobians_in_subspace(derivatives = derivatives, output_basis = phi, output_projector = Mphi,\
