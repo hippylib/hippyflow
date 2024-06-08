@@ -243,6 +243,7 @@ Journal of Computational Physics, 112104
 
 - \[5\] O'Leary-Roseberry, T., Chen P., Villa, U., Ghattas, O.,
 [**Derivative-Informed Neural Operator: An Efficient Framework for High-Dimensional Parametric Derivative Learning**](https://arxiv.org/abs/2206.10745).
+Journal of Computational Physics, 112555
 ([Download](https://arxiv.org/abs/2206.10745))<details><summary>BibTeX</summary><pre>
 @article{OLearyRoseberryChenVillaEtAl22,
   title={Derivative-Informed Neural Operator: an efficient framework for high-dimensional parametric derivative learning},
