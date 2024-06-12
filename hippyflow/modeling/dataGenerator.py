@@ -86,7 +86,7 @@ class DataGenerator:
 
 
 	def generate(self, n_samples, derivatives = (0,0),\
-					output_basis = None, input_basis = None,\
+					output_decoder = None, input_decoder = None,\
 					n_data_per_sample=1,\
 					data_dir = 'data/test/',  compress = True, clean_up = True):
 		"""
@@ -104,7 +104,7 @@ class DataGenerator:
 
 
 		sketching_arrays = self.initialize_sampling(derivatives = derivatives,\
-					output_basis = output_basis, input_basis = input_basis)
+					output_decoder = output_decoder, input_decoder = input_decoder)
 		Omega_m = sketching_arrays['Omega_m']
 		Omega_z = sketching_arrays['Omega_z']
 		Phi = sketching_arrays['Phi']
@@ -168,14 +168,14 @@ class DataGenerator:
 
 			if derivatives[0]:
 				t0_jacobian = time.time()
-				if output_basis is not None:
+				if output_decoder is not None:
 					assert Phi is not None
 					assert JstarPhi is not None
 					JstarPhi.zero()
 					hp.MatMvTranspmult(self.J,MPhi,JstarPhi)
 					JstarPhi_np = hf.mv_to_dense(JstarPhi)
 					np.save(data_dir+'J_data/JstarPhi'+str(i)+'.npy',JstarPhi_np)
-				elif input_basis is not None:
+				elif input_decoder is not None:
 					assert Psi is not None
 					assert JPsi is not None
 					JPsi.zero()
@@ -201,7 +201,7 @@ class DataGenerator:
 
 			if derivatives[1]:
 				t0_control_jacobian = time.time()
-				if output_basis is not None:
+				if output_decoder is not None:
 					assert MPhi is not None
 					assert JzstarPhi is not None
 					JzstarPhi.zero()
@@ -239,7 +239,7 @@ class DataGenerator:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up,\
-							has_z_data = has_z_data, has_y_data=(self.misfit is not None), input_basis = input_basis, output_basis = output_basis)
+							has_z_data = has_z_data, has_y_data=(self.misfit is not None), input_decoder = input_decoder, output_decoder = output_decoder)
 
 
 	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
@@ -270,14 +270,14 @@ class DataGenerator:
 			assert orth_error < 1e-5
 
 		# Step 2.
-		self.compute_jacobians_in_subspace(derivatives = derivatives, output_basis = phi, output_projector = Mphi,\
+		self.compute_jacobians_in_subspace(derivatives = derivatives, output_decoder = phi, output_encoder = Mphi,\
 						 data_file_name = data_file_name, data_dir = data_dir, compress_derivatives_only = True)
 
 
-	def compute_jacobians_in_subspace(self, derivatives, output_basis,  data_file_name, data_dir, output_projector = None,\
+	def compute_jacobians_in_subspace(self, derivatives, output_decoder,  data_file_name, data_dir, output_encoder = None,\
 			compress=True, clean_up=True,compress_derivatives_only = True):
-		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_basis = output_basis,\
-													output_projector = output_projector)
+		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_decoder = output_decoder,\
+													output_encoder = output_encoder)
 		Phi = sketching_arrays['Phi']
 		MPhi = sketching_arrays['MPhi']
 		assert MPhi is not None
@@ -327,13 +327,13 @@ class DataGenerator:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up, has_z_data = has_z_data,\
-				 input_basis = None, output_basis = output_basis)
+				 input_decoder = None, output_decoder = output_decoder)
 
 
 
 
-	def initialize_sampling(self,derivatives,input_basis = None,input_projector = None,\
-												output_basis = None,output_projector = None):
+	def initialize_sampling(self,derivatives,input_decoder = None,input_encoder = None,\
+												output_decoder = None,output_encoder = None):
 		"""
 		"""
 		Omega_m = None
@@ -374,19 +374,19 @@ class DataGenerator:
 			self.J = hf.ObservableJacobian(self.observable)
 			self.dQ, self.dM = self.J.shape
 
-			if output_basis is not None:
-				if output_projector is None:
+			if output_decoder is not None:
+				if output_encoder is None:
 					print('Potential issue with outputs if not using (.,.)_2 inner product\n')
 					print('Make sure to pass in a projector if using a different inner product')
-					output_projector = output_basis
+					output_encoder = output_decoder
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
-				Phi = hf.dense_to_mv_local(output_basis,qsample)
-				MPhi = hf.dense_to_mv_local(output_projector,qsample)
+				Phi = hf.dense_to_mv_local(output_decoder,qsample)
+				MPhi = hf.dense_to_mv_local(output_encoder,qsample)
 				JstarPhi = hp.MultiVector(self.m,Phi.nvec())
-			elif input_basis is not None:
+			elif input_decoder is not None:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
-				Psi = hf.dense_to_mv_local(input_basis,self.m)
-				RPsi = hf.dense_to_mv_local(input_projector,self.m)
+				Psi = hf.dense_to_mv_local(input_decoder,self.m)
+				RPsi = hf.dense_to_mv_local(input_encoder,self.m)
 				JPsi = hp.MultiVector(qsample,Psi.nvec())
 			else:
 				rM = self.settings['rM']
@@ -404,21 +404,21 @@ class DataGenerator:
 			self.Jz = hf.ObservableControlJacobian(self.observable)
 			self.dQ,self.dZ = self.Jz.shape
 
-			if output_basis is not None:
+			if output_decoder is not None:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				if Phi is None:
-					if output_projector is None:
+					if output_encoder is None:
 						print('Potential issue with outputs if not using (.,.)_2 inner product\n')
 						print('Make sure to pass in a projector if using a different inner product')
-						output_projector = output_basis
-					Phi = hf.dense_to_mv_local(output_basis,qsample)
-					MPhi = hf.dense_to_mv_local(output_projector,qsample)
+						output_encoder = output_decoder
+					Phi = hf.dense_to_mv_local(output_decoder,qsample)
+					MPhi = hf.dense_to_mv_local(output_encoder,qsample)
 				JzstarPhi = hp.MultiVector(self.z,Phi.nvec())
-			elif input_basis is not None:
+			elif input_decoder is not None:
 				assert self.mesh_constructor_comm.size == 1, print('Only worked out for serial codes')
 				if Psi is None:
-					Psi = hf.dense_to_mv_local(input_basis,self.m)
-					RPsi = hf.dense_to_mv_local(input_projector,self.m)
+					Psi = hf.dense_to_mv_local(input_decoder,self.m)
+					RPsi = hf.dense_to_mv_local(input_encoder,self.m)
 				JzPsi = hp.MultiVector(qsample,Psi.nvec())
 			else:
 				rZ = self.settings['rZ']
@@ -463,8 +463,8 @@ class DataGenerator:
 
 
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
-					has_z_data = False, has_y_data=False, input_basis = None, output_basis = None,\
-					input_projector = None, output_projector = None,\
+					has_z_data = False, has_y_data=False, input_decoder = None, output_decoder = None,\
+					input_encoder = None, output_encoder = None,\
 					derivatives_only = False):
 
 	################################################################################
@@ -619,17 +619,17 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 	if derivatives[0]:
 		if compress_JstarPhi:
-			np.savez_compressed(file_path+'JstarPhi_data.npz',JstarPhi_data = JstarPhi_data,Phi = output_basis,MPhi = output_projector)
+			np.savez_compressed(file_path+'JstarPhi_data.npz',JstarPhi_data = JstarPhi_data,Phi = output_decoder,MPhi = output_encoder)
 		if compress_JPsi:
-			np.savez_compressed(file_path+'JPsi_data.npz',JPsi_data = JPsi_data,Psi = input_basis, input_projector = input_projector)
+			np.savez_compressed(file_path+'JPsi_data.npz',JPsi_data = JPsi_data,Psi = input_decoder, input_encoder = input_encoder)
 		if compress_Jsvd:
 			np.savez_compressed(file_path+'Jsvd_data.npz',U_data = U_data, sigma_data =sigma_data, V_data = V_data)
 
 	if derivatives[1]:
 		if compress_JzstarPhi:
-			np.savez_compressed(file_path+'JzstarPhi_data.npz',JzstarPhi_data = JzstarPhi_data,Phi = output_basis,MPhi = output_projector)
+			np.savez_compressed(file_path+'JzstarPhi_data.npz',JzstarPhi_data = JzstarPhi_data,Phi = output_decoder,MPhi = output_encoder)
 		if compress_JzPsi:
-			np.savez_compressed(file_path+'JzPsi_data.npz',JzPsi_data = JzPsi_data,Psi = input_basis, input_projector = input_projector)
+			np.savez_compressed(file_path+'JzPsi_data.npz',JzPsi_data = JzPsi_data,Psi = input_decoder, input_encoder = input_encoder)
 		if compress_Jzsvd:
 			np.savez_compressed(file_path+'Jzsvd_data.npz',Uz_data = Uz_data, sigmaz_data =sigmaz_data, Vz_data = Vz_data)
 

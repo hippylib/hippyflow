@@ -45,8 +45,8 @@ def ActiveSubspaceParameterList():
 	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
-	parameters['input_basis_name']			= ['_input_projector', 'string for naming']
-	parameters['output_basis_name']			= ['_output_projector', 'string for naming']
+	parameters['input_decoder_name']			= ['_input_decoder', 'string for naming']
+	parameters['output_decoder_name']			= ['_output_decoder', 'string for naming']
 
 
 
@@ -448,19 +448,19 @@ class ActiveSubspaceProjector:
 			if hasattr(self.prior, "R"):
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
-				as_basis = self.V_GN
-				as_projector = hp.MultiVector(as_basis)
-				hp.MatMvMult(self.prior.R,as_basis,as_projector)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
+				hp.MatMvMult(self.prior.R,as_decoder,as_encoder)
 			else:
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
-				as_basis = self.V_GN
-				as_projector = hp.MultiVector(as_basis)
-				hp.MatMvMult(self.prior.Hlr,as_basis,as_projector)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
+				hp.MatMvMult(self.prior.Hlr,as_decoder,as_encoder)
 		else:
 			self.d_GN, self.V_GN = hp.doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
-			as_basis = self.V_GN
-			as_projector = hp.MultiVector(as_basis)
+			as_decoder = self.V_GN
+			as_encoder = hp.MultiVector(as_decoder)
 
 		total_init_time = time.time() - t0
 		for i in range(100):
@@ -476,7 +476,7 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+self.parameters['input_basis_name'],mv_to_dense(self.V_GN))
+			np.save(self.parameters['output_directory']+name+self.parameters['input_decoder_name'],mv_to_dense(self.V_GN))
 			np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 
 			plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -484,7 +484,7 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 
-		return self.d_GN, as_basis, as_projector
+		return self.d_GN, as_decoder, as_encoder
 
 	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ',name_suffix = None):
 		"""
@@ -555,19 +555,19 @@ class ActiveSubspaceProjector:
 				if hasattr(self.prior, "R"):
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
-					as_basis = self.V_GN
-					as_projector = hp.MultiVector(as_basis)
-					hp.MatMvMult(self.prior.R,as_basis,as_projector)
+					as_decoder = self.V_GN
+					as_encoder = hp.MultiVector(as_decoder)
+					hp.MatMvMult(self.prior.R,as_decoder,as_encoder)
 				else:
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
-					as_basis = self.V_GN
-					as_projector = hp.MultiVector(as_basis)
-					hp.MatMvMult(self.prior.Hlr,as_basis,as_projector)
+					as_decoder = self.V_GN
+					as_encoder = hp.MultiVector(as_decoder)
+					hp.MatMvMult(self.prior.Hlr,as_decoder,as_encoder)
 			else:
 				self.d_GN, self.V_GN = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
-				as_basis = self.V_GN
-				as_projector = hp.MultiVector(as_basis)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
 			self.prior_preconditioned = prior_preconditioned
 			self._input_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
@@ -575,8 +575,8 @@ class ActiveSubspaceProjector:
 
 		elif operation == 'JJT':
 			self.d_NG, self.U_NG = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
-			output_basis = self.U_NG
-			output_projector = hp.MultiVector(output_basis)
+			output_decoder = self.U_NG
+			output_encoder = hp.MultiVector(output_decoder)
 
 			self._output_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
@@ -589,7 +589,7 @@ class ActiveSubspaceProjector:
 				assert type(name_suffix) is str
 				name += name_suffix
 			if operation == 'JTJ':
-				np.save(self.parameters['output_directory']+name+self.parameters['input_basis_name'],mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+name+self.parameters['input_decoder_name'],mv_to_dense(self.V_GN))
 				np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 				plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 				try:
@@ -599,7 +599,7 @@ class ActiveSubspaceProjector:
 				except:
 					print('Issue plotting, probably latex related')
 			if operation == 'JJT':
-				np.save(self.parameters['output_directory']+name+self.parameters['output_basis_name'],mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+name+self.parameters['output_decoder_name'],mv_to_dense(self.U_NG))
 				np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 				plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -611,9 +611,9 @@ class ActiveSubspaceProjector:
 					print('Issue plotting, probably, latex related')
 
 		if operation == 'JTJ':
-			return self.d_GN, as_basis, as_projector
+			return self.d_GN, as_decoder, as_encoder
 		elif operation == 'JJT':
-			return self.d_NG, output_basis, output_projector
+			return self.d_NG, output_decoder, output_encoder
 
 	def construct_output_subspace(self,name_suffix = None):
 		if self.parameters['serialized_sampling']:
@@ -652,8 +652,8 @@ class ActiveSubspaceProjector:
 
 		self.collective.bcast(Omega,root = 0)
 		self.d_NG, self.U_NG = hp.doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
-		output_basis = self.U_NG
-		output_projector = hp.MultiVector(output_basis)
+		output_decoder = self.U_NG
+		output_encoder = hp.MultiVector(output_decoder)
 		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
@@ -662,7 +662,7 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+self.parameters['output_basis_name'],mv_to_dense(self.U_NG))
+			np.save(self.parameters['output_directory']+name+self.parameters['output_decoder_name'],mv_to_dense(self.U_NG))
 			np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 			plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -670,7 +670,7 @@ class ActiveSubspaceProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
 
-		return self.d_NG, output_basis, output_projector
+		return self.d_NG, output_decoder, output_encoder
 
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):

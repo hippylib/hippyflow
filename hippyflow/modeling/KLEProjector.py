@@ -40,7 +40,7 @@ def KLEParameterList():
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 	parameters['save_and_plot']				= [True, 'save and plot or not']
 
-	parameters['input_basis_name']			= ['KLE_basis', 'string for naming']
+	parameters['input_decoder_name']			= ['KLE_decoder', 'string for naming']
 
 	return hp.ParameterList(parameters)
 
@@ -127,8 +127,8 @@ class KLEProjector:
 		self.collective.bcast(Omega,root = 0)
 		return Omega
 
-		self.kle_basis = None
-		self.kle_projector = None
+		self.kle_decoder = None
+		self.kle_encoder = None
 	
 
 
@@ -163,21 +163,21 @@ class KLEProjector:
 			self.d_KLE, self.V_KLE = hp.doublePassG(KLE_Operator,\
 				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = True
-			kle_basis = self.V_KLE
-			kle_projector = hp.MultiVector(kle_basis)
-			hp.MatMvMult(self.prior.M,kle_basis,kle_projector)
+			kle_decoder = self.V_KLE
+			kle_encoder = hp.MultiVector(kle_decoder)
+			hp.MatMvMult(self.prior.M,kle_decoder,kle_encoder)
 
 		elif orthogonality.lower() == 'prior':
 			prior_orth_KLE_constructor = KLESubspaceConstructorSLEPc(self.prior)
-			self.d_KLE, kle_basis, kle_projector = prior_orth_KLE_constructor.compute_kle_subspace(self.parameters['rank'])
-			self.V_KLE = kle_basis
+			self.d_KLE, kle_decoder, kle_encoder = prior_orth_KLE_constructor.compute_kle_subspace(self.parameters['rank'])
+			self.V_KLE = kle_decoder
 
 		elif orthogonality.lower() == 'identity':
 			RsolverOperator = hp.Solver2Operator(self.prior.Rsolver)
 			self.d_KLE, self.V_KLE = hp.doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = False
-			kle_basis = self.V_KLE
-			kle_projector = hp.MultiVector(kle_basis) #copy constructor
+			kle_decoder = self.V_KLE
+			kle_encoder = hp.MultiVector(kle_decoder) #copy constructor
 
 		else: 
 			raise
@@ -188,7 +188,7 @@ class KLEProjector:
 			# print('Input subspace eigenvalues = ',self.d_GN)
 
 		if True and MPI.COMM_WORLD.rank == 0 and self.parameters['save_and_plot']:
-			np.save(self.parameters['output_directory']+self.parameters['input_basis_name'],mv_to_dense(self.V_KLE))
+			np.save(self.parameters['output_directory']+self.parameters['input_decoder_name'],mv_to_dense(self.V_KLE))
 			np.save(self.parameters['output_directory']+'KLE_d',self.d_KLE)
 
 			out_name = self.parameters['output_directory']+'KLE_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
@@ -196,7 +196,7 @@ class KLEProjector:
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $C$'+self.parameters['plot_label_suffix']], out_name = out_name)
 
-		return self.d_KLE, kle_basis, kle_projector
+		return self.d_KLE, kle_decoder, kle_encoder
 
 
 	def test_errors(self, ranks = [None],cut_off = 1e-12):
@@ -317,21 +317,21 @@ class KLESubspaceConstructorSLEPc:
 		sqrt_precision_eigenvalues = np.zeros(rank)
 
 		print("Initializing multivectors")
-		kle_basis = hp.MultiVector(self.m, rank)
-		kle_projector = hp.MultiVector(self.m, rank)
+		kle_decoder = hp.MultiVector(self.m, rank)
+		kle_encoder = hp.MultiVector(self.m, rank)
 
-		kle_basis.zero()
-		kle_projector.zero()
+		kle_decoder.zero()
+		kle_encoder.zero()
 
 
 		for i in range(rank):
 			sqrt_precision_eigenvalues[i], _, basis_i, _ = self.eigensolver.get_eigenpair(i)
-			kle_basis[i].axpy(1.0/sqrt_precision_eigenvalues[i], basis_i)
+			kle_decoder[i].axpy(1.0/sqrt_precision_eigenvalues[i], basis_i)
 
 		covariance_eigenvalues = 1/sqrt_precision_eigenvalues**2
 
-		hp.MatMvMult(self.R, kle_basis, kle_projector)
-		return covariance_eigenvalues, kle_basis, kle_projector
+		hp.MatMvMult(self.R, kle_decoder, kle_encoder)
+		return covariance_eigenvalues, kle_decoder, kle_encoder
 
 
 

@@ -47,7 +47,7 @@ class TestPODProjectorFromData(unittest.TestCase):
 		"""
 		Test the POD constructor with a shift 
 
-		 - Orthogonality check for basis and projector
+		 - Orthogonality check for decoder and encoder
 		 - Check the shift is non zero 
 		 - Check POD satisfies eigenvalue problem 
 		"""
@@ -56,16 +56,16 @@ class TestPODProjectorFromData(unittest.TestCase):
 		methods = ['hep', 'ghep', 'inverse_ghep']
 
 		for method in methods:
-			d, basis, projector, u_shift = self._construct_subspace(u_rank, shift, method)
-			self._check_orthogonality(basis, projector)
+			d, decoder, encoder, u_shift = self._construct_subspace(u_rank, shift, method)
+			self._check_orthogonality(decoder, encoder)
 			self._check_shift(u_shift, shift)
-			self._check_eigenvalue_problem(self.u_data, d, basis, projector, u_shift)
+			self._check_eigenvalue_problem(self.u_data, d, decoder, encoder, u_shift)
 
 	def test_pod_no_shift(self):
 		"""
 		Test the POD constructor with no shift 
 
-		 - Orthogonality check for basis and projector
+		 - Orthogonality check for decoder and encoder
 		 - Check the shift is zero
 		 - Check POD satisfies eigenvalue problem 
 		"""
@@ -74,10 +74,10 @@ class TestPODProjectorFromData(unittest.TestCase):
 		methods = ['hep', 'ghep', 'inverse_ghep']
 
 		for method in methods:
-			d, basis, projector, u_shift = self._construct_subspace(u_rank, shift, method)
-			self._check_orthogonality(basis, projector)
+			d, decoder, encoder, u_shift = self._construct_subspace(u_rank, shift, method)
+			self._check_orthogonality(decoder, encoder)
 			self._check_shift(u_shift, shift)
-			self._check_eigenvalue_problem(self.u_data, d, basis, projector, u_shift)
+			self._check_eigenvalue_problem(self.u_data, d, decoder, encoder, u_shift)
 
 
 	def _build_pde_problem(self, mesh):
@@ -145,31 +145,31 @@ class TestPODProjectorFromData(unittest.TestCase):
 		"""
 		pod_constructor = hf.PODProjectorFromData(self.Vh, self.M)
 
-		d, basis, projector, u_shift = pod_constructor.construct_subspace(self.u_data, u_rank, 
+		d, decoder, encoder, u_shift = pod_constructor.construct_subspace(self.u_data, u_rank, 
 																	shifted=shift, 
 																	method=pod_method, 
 																	verify=True)
-		return d, basis, projector, u_shift 
+		return d, decoder, encoder, u_shift 
 
-	def _check_orthogonality(self, basis, projector):
+	def _check_orthogonality(self, decoder, encoder):
 		"""
-		Check the orthogonality properties of the basis and projector 
+		Check the orthogonality properties of the decoder and encoder 
 
-		 - Basis and projector should be M-orthogonal
-		 - Projector should :code:`M @ basis`
+		 - Decoder and encoder should be M-orthogonal
+		 - Encoder should :code:`M @ decoder`
 		"""
 		fro_tol = 1e-8 
 
 		# Orthogonality check 
-		UMU = basis.T @ projector
+		UMU = decoder.T @ encoder
 		identity_of_size_U = np.eye(UMU.shape[0])
 		U_orth_error = np.linalg.norm(identity_of_size_U - UMU, 'fro')/np.linalg.norm(identity_of_size_U, 'fro')
 		print("U orthogonality error %g" %(U_orth_error))
 		assert U_orth_error < fro_tol 
 
 		# Check that MU is computed correctly 
-		MU_test_np = self.M_csr @ basis
-		MU_error = np.linalg.norm(MU_test_np - projector, 'fro')/np.linalg.norm(projector, 'fro')
+		MU_test_np = self.M_csr @ decoder
+		MU_error = np.linalg.norm(MU_test_np - encoder, 'fro')/np.linalg.norm(encoder, 'fro')
 		print("MU error %g" %(MU_error))
 		assert MU_error < fro_tol 
 
@@ -185,7 +185,7 @@ class TestPODProjectorFromData(unittest.TestCase):
 		else:
 			assert np.allclose(u_shift, 0)
 
-	def _check_eigenvalue_problem(self, u_data, d, basis, projector, u_shift):
+	def _check_eigenvalue_problem(self, u_data, d, decoder, encoder, u_shift):
 		"""
 		Check that POD satisfies the eigenvalue problem 
 		:math:`\mathbb{E}[(u - u_{s}) (u - u_{s})^T M] \phi = \lambda \phi`
@@ -196,19 +196,19 @@ class TestPODProjectorFromData(unittest.TestCase):
 		n_data = u_data.shape[0]
 		shifted_data = u_data - u_shift 
 		data_covariance = shifted_data.T @ shifted_data / n_data 
-		CMU_np = data_covariance @ self.M_csr @ basis
+		CMU_np = data_covariance @ self.M_csr @ decoder
 
 		u_fun = dl.Function(self.Vh[hp.STATE])
  
 		print("POD with shift") 
 		for i in range(d.shape[0]):
-			diff = CMU_np[:,i] - d[i] * basis[:,i]
-			rel_error = np.linalg.norm(diff)/np.linalg.norm(basis[:,i] * d[i]) 
+			diff = CMU_np[:,i] - d[i] * decoder[:,i]
+			rel_error = np.linalg.norm(diff)/np.linalg.norm(decoder[:,i] * d[i]) 
 			print("CM Eigenvector %d relative error, %g" %(i, rel_error))
 			assert rel_error < rel_tol
  
 		# 	plt.figure()
-		# 	u_fun.vector().set_local(basis[:,i])
+		# 	u_fun.vector().set_local(decoder[:,i])
 		# 	hp.nb.plot(u_fun, mytitle="Output: phi %d" %(i))
  
 		# 	plt.figure()
