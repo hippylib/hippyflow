@@ -35,14 +35,13 @@ def data_generator_settings(settings = {}):
 
 class DataGenerator:
 
-	def __init__(self,observable, prior, misfit=None, control_distribution = None,\
+	def __init__(self,observable, prior, control_distribution = None,\
 					settings = data_generator_settings(), parRandom = None,\
 					mesh_constructor_comm = None):
 		"""
 		"""
 		self.observable = observable
 		self.prior = prior
-		self.misfit = misfit
 		self.control_distribution = control_distribution
 
 		# Constructor for mesh-partitioned vectors
@@ -138,23 +137,13 @@ class DataGenerator:
 			this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
 
-			# generate observations
-			if self.misfit is not None:
-				this_y = []
-				d = dl.Vector(self.misfit.B.mpi_comm())
-				self.misfit.B.init_vector(d, 0)
-				for _ in range(n_data_per_sample):
-					d.set_local(this_q)
-					noise_std = np.sqrt(self.misfit.noise_variance)
-					self.parRandom.normal_perturb(noise_std, d)
-					this_y.append(d.get_local())
+
 
 
 			if self.control_distribution is None:
 				np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
 				np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
-				if self.misfit is not None:
-					np.save(data_dir+'mq_data/y_samples_'+str(i)+'.npy',np.array(this_y)) #N_samples x dY
+
 			else:
 				np.save(data_dir+'mzq_data/m_sample_'+str(i)+'.npy',this_m)
 				np.save(data_dir+'mzq_data/q_sample_'+str(i)+'.npy',this_q)
@@ -239,17 +228,25 @@ class DataGenerator:
 			print('Commencing compression'.center(80))
 			has_z_data = hasattr(self.observable.problem, 'Cz')
 			compress_dataset(data_dir,derivatives = derivatives, clean_up = clean_up,\
-							has_z_data = has_z_data, has_y_data=(self.misfit is not None), input_decoder = input_decoder, output_decoder = output_decoder)
+							has_z_data = has_z_data, input_decoder = input_decoder, output_decoder = output_decoder)
 
 
 	def two_step_generate(self,n_samples, n_samples_pod=None, derivatives = (0,0),\
-					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True):
+					pod_rank = None, data_dir = 'data/test/', compress = True, clean_up = True,\
+					pod_method = 'hep',pod_shifted = True):
+		"""
+		Texas two-step generate. 
+		Step 1: Generate forward map evaluation to compute compressed POD basis
+		Step 2: Jacobian solves at the forward map linearization points in the POD basis
+		"""
 		# Assert that this is a full state PDE problem.
 		assert type(self.observable.B) is hf.StateSpaceIdentityOperator
 
 		if n_samples_pod is None:
 			# Could be risky
 			n_samples_pod = n_samples
+
+		assert pod_rank <= n_samples_pod, "number of samples for POD needs to be greater than rank of projector"
 
 		# Step 1. Generate m -> u(m) or (m,z) -> u(m,z)
 		self.generate(n_samples, derivatives = (0,0),data_dir = data_dir, compress = True, clean_up = False)
@@ -262,12 +259,20 @@ class DataGenerator:
 			all_data = np.load(data_dir+'mq_data.npz')
 		u_data = all_data['q_data'][:n_samples_pod]
 		POD = hf.PODProjectorFromData(self.observable.problem.Vh)
-		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank)
+		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank,method = pod_method,verify = True)
 		if True:
-			PsistarPsi = Mphi.T@phi
+			u_rank_verify = pod_rank
+			if pod_shifted:
+				u_rank_verify -=1
+			PsistarPsi = Mphi[:,:u_rank_verify].T@phi[:,:u_rank_verify]
 			orth_error = np.linalg.norm(PsistarPsi - np.eye(PsistarPsi.shape[0]))
 			print('||Psi^*Psi - I|| = ',orth_error)
 			assert orth_error < 1e-5
+		# Save POD
+		os.makedirs(data_dir+'/POD/',exist_ok=True)
+		np.save(data_dir+f'/POD/POD_decoder.npy',phi)
+		np.save(data_dir+f'/POD/POD_encoder.npy',Mphi)
+		np.save(data_dir+f'/POD/d_POD.npy',d_POD)
 
 		# Step 2.
 		self.compute_jacobians_in_subspace(derivatives = derivatives, output_decoder = phi, output_encoder = Mphi,\
@@ -463,7 +468,7 @@ class DataGenerator:
 
 
 def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
-					has_z_data = False, has_y_data=False, input_decoder = None, output_decoder = None,\
+					has_z_data = False, input_decoder = None, output_decoder = None,\
 					input_encoder = None, output_encoder = None,\
 					derivatives_only = False):
 
@@ -496,8 +501,6 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			index = int(file.split('m_sample_')[-1].split('.npy')[0])
 			ndata = max(ndata,index)
 			assert os.path.exists(data_path+'q_sample_'+str(index)+'.npy')
-			if has_y_data:
-				assert os.path.exists(data_path+'y_samples_'+str(index)+'.npy')
 			if has_z_data:
 				assert os.path.exists(data_path+'z_sample_'+str(index)+'.npy')
 			if derivatives[0]:
@@ -531,18 +534,13 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 
 	dM = np.load(data_path+'m_sample_'+str(index)+'.npy').shape[0]
 	dQ = np.load(data_path+'q_sample_'+str(index)+'.npy').shape[0]
-	if has_y_data:
-		N_iid, dY = np.load(data_path+'y_samples_'+str(index)+'.npy').shape
 
 	m_data = np.zeros((ndata,dM))
 	q_data = np.zeros((ndata,dQ))
-	if has_y_data:
-		y_data = np.zeros((ndata, N_iid, dY))
+
 	print('dM = ',dM)
 	print('dQ = ',dQ)
-	if has_y_data:
-		print('dY = ',dY)
-		print('num i.i.d. data samples = ',N_iid)
+
 
 	if has_z_data:
 		dZ = np.load(data_path+'z_sample_'+str(index)+'.npy').shape[0]
@@ -583,8 +581,6 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 		if not derivatives_only:
 			m_data[index] = np.load(data_path+'/m_sample_'+str(index)+'.npy')
 			q_data[index] = np.load(data_path+'/q_sample_'+str(index)+'.npy')
-			if has_y_data:
-				y_data[index] = np.load(data_path+'y_samples_'+str(index)+'.npy')
 
 			if has_z_data:
 				z_data[index] = np.load(data_path+'/z_sample_'+str(index)+'.npy')
@@ -615,7 +611,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			np.savez_compressed(file_path+'mzq_data.npz',m_data = m_data, q_data = q_data,z_data = z_data)
 		else:
 			np.savez_compressed(file_path+'mq_data.npz',m_data = m_data, q_data = q_data)
-			np.savez_compressed(file_path+'mqy_data.npz',m_data = m_data, q_data = q_data, y_data = y_data)
+
 
 	if derivatives[0]:
 		if compress_JstarPhi:

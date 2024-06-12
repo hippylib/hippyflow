@@ -661,6 +661,8 @@ def weighted_l2_norm_vector(x, W):
     return np.sqrt(norm2)
 
 
+
+
 class PODProjectorFromData:
 	"""
 	For constructing the proper orthogonal decomposition (POD) subspace 
@@ -746,13 +748,17 @@ class PODProjectorFromData:
 
 			# Compute AA^T/n for the data matrix 
 			MX = self.M_csr @ u_data 
-			H = MX @ MX.T / n_data 
+
+			H_shape = (MX.shape[0], MX.shape[0])
+			H_matvec = lambda x : MX @ (MX.T @ x) / n_data 
+			H_op = spla.LinearOperator(matvec=H_matvec, shape=H_shape)
+			# H = MX @ MX.T / n_data 
 			tpre1 = time.time()
 			print(f"Preprocessing took {tpre1 - tpre0:.3g} seconds")
 			# solve generalized eigenvalue problem 
 			print("Solving eigenvalue problem")
 			t0 = time.time()
-			d, phi = spla.eigsh(H, M=self.M_csr, k=u_rank) 
+			d, phi = spla.eigsh(H_op, M=self.M_csr, k=u_rank) 
             # Can also include a dense option if entire spectrum is needed
 			# d, phi = spla.eigh(H, self.M_csr.toarray())
 			d = np.flipud(d)[:u_rank]
@@ -778,8 +784,11 @@ class PODProjectorFromData:
 			M_op = spla.aslinearoperator(self.M_csr)
 
 			# Compute AA^T/n for the data matrix 
-			H = u_data @ u_data.T / n_data
-			H_op = spla.aslinearoperator(H)
+			# H = u_data @ u_data.T / n_data
+			# H_op = spla.aslinearoperator(H)
+			H_shape = (u_data.shape[0], u_data.shape[0])
+			H_matvec = lambda x : u_data @ (u_data.T @ x) / n_data 
+			H_op = spla.LinearOperator(matvec=H_matvec, shape=H_shape)
 			
 			tpre1 = time.time()
 			print(f"Preprocessing took {tpre1 - tpre0:.3g} seconds")
@@ -788,7 +797,7 @@ class PODProjectorFromData:
 
 			t0 = time.time()
 
-			d, Mphi = spla.eigsh(H, k=u_rank, M=M_inv_op, Minv=M_op)
+			d, Mphi = spla.eigsh(H_op, k=u_rank, M=M_inv_op, Minv=M_op)
 			d = np.flipud(d)
 			Mphi = np.fliplr(Mphi)
 
