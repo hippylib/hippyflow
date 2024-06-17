@@ -36,7 +36,7 @@ def KLEParameterList():
 	parameters['rank'] 				 		= [128, 'Rank of subspace']
 	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
 	parameters['verbose']					= [True, 'Boolean for printing']
-	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
+	parameters['output_directory']			= ['./data/','output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
 	parameters['save_and_plot']				= [True, 'save and plot or not']
 
