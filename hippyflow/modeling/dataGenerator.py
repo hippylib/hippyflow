@@ -205,9 +205,9 @@ class DataGenerator:
 					Uznp = hf.mv_to_dense(Uz)
 					Vznp = hf.mv_to_dense(Vz)
 
-					np.save(jacobian_process_specific_directory+'Uz_sample_'+str(i)+'.npy',Uznp)
-					np.save(jacobian_process_specific_directory+'sigmaz_sample_'+str(i)+'.npy',sigmaz)
-					np.save(jacobian_process_specific_directory+'Vz_sample_'+str(i)+'.npy',Vznp)
+					np.save(data_dir+'J_data/Uz_sample_'+str(i)+'.npy',Uznp)
+					np.save(data_dir+'J_data/sigmaz_sample_'+str(i)+'.npy',sigmaz)
+					np.save(data_dir+'J_data/Vz_sample_'+str(i)+'.npy',Vznp)
 				
 				control_jacobian_time = time.time() - t0_control_jacobian
 
