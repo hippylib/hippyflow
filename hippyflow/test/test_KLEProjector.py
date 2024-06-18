@@ -52,11 +52,11 @@ class MassPreconditionedCovarianceOperator:
 		self.M.mult(self.CMx, y)
 
 
-class TestKLEProjectorFromData(unittest.TestCase):
+class TestKLEProjector(unittest.TestCase):
     def setUp(self):
         nx = 16
         ny = 16
-        self.rank = 256
+        self.rank = 128
 
         # Setup mesh and function spaces
         self.mesh = dl.UnitSquareMesh(nx, ny)
@@ -69,11 +69,6 @@ class TestKLEProjectorFromData(unittest.TestCase):
 
         # Setup sample vector
         self.m = dl.Function(self.Vh[hp.PARAMETER]).vector()
-
-        # Extract the mass matrix as a csr matrix
-        M_mat = dl.as_backend_type(self.prior.M).mat()
-        row, col, val = M_mat.getValuesCSR()
-        self.M_csr = csr_matrix((val, col, row))
 
         # Setup subspace constructor
         parameters = hf.KLEParameterList()

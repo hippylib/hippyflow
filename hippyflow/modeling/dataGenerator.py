@@ -201,7 +201,7 @@ class DataGenerator:
 					Omega_z.zero() # probably unecessary
 					hp.parRandom.normal(1.,Omega_z)
 
-					Uz, sigmaz, Vz = hp.accuracyEnhancedSVD(self.Jz,Omega_z,rZ, s=1)
+					Uz, sigmaz, Vz = hp.accuracyEnhancedSVD(self.Jz,Omega_z,self.settings['rZ'], s=1)
 					Uznp = hf.mv_to_dense(Uz)
 					Vznp = hf.mv_to_dense(Vz)
 
@@ -430,7 +430,8 @@ class DataGenerator:
 				oversample = self.settings['oversample']
 
 				control_vector = dl.Vector(self.mesh_constructor_comm)
-				self.Jz.init_vector(control_vector,1)
+				self.Jz.init_vector(control_vector,1)	# NOTE: This part should be fixed as the initialization will fail if we don't
+														# setLinearizationPoint before
 				nvec_Omega_z = min(rZ +oversample,self.dQ,self.dZ)		# Fix me in the case that min is dQ :)
 				Omega_z = hp.MultiVector(control_vector,nvec_Omega_m)
 				hp.parRandom.normal(1.,Omega_z)
