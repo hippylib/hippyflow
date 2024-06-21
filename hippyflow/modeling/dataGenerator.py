@@ -430,10 +430,16 @@ class DataGenerator:
 				oversample = self.settings['oversample']
 
 				control_vector = dl.Vector(self.mesh_constructor_comm)
-				self.Jz.init_vector(control_vector,1)	# NOTE: This part should be fixed as the initialization will fail if we don't
-														# setLinearizationPoint before
+				# Set linearization point before intializing the vector
+				x = [self.observable.problem.generate_state(),
+		 			 self.observable.problem.generate_parameter(),
+					 self.observable.problem.generate_state(),
+					 self.observable.problem.generate_control()]
+
+				self.observable.problem.setLinearizationPoint(x, False)
+				self.Jz.init_vector(control_vector,1)
 				nvec_Omega_z = min(rZ +oversample,self.dQ,self.dZ)		# Fix me in the case that min is dQ :)
-				Omega_z = hp.MultiVector(control_vector,nvec_Omega_m)
+				Omega_z = hp.MultiVector(control_vector,nvec_Omega_z)
 				hp.parRandom.normal(1.,Omega_z)
 
 		if derivatives[0] or derivatives[1]:
