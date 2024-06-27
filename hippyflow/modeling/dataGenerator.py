@@ -118,110 +118,110 @@ class DataGenerator:
 			print(80*'#')
 
 		for i in range(n_samples):
-			t0_samplei = time.time()
-			################################################################################
-			# Sample forward map m -> q(m) or m,z -> q(m,z), also sample y = q + noise, y can be several or just 1 data sample and save
-			self.parRandom.normal(1,self.noise)
+			try:
+				t0_samplei = time.time()
+				################################################################################
+				# Sample forward map m -> q(m) or m,z -> q(m,z), also sample y = q + noise, y can be several or just 1 data sample and save
+				self.parRandom.normal(1,self.noise)
 
-			self.m.zero()
-			self.prior.sample(self.noise,self.m)
+				self.m.zero()
+				self.prior.sample(self.noise,self.m)
 
-			if self.control_distribution is not None:
-				self.control_distribution.sample(self.z)
-				x = [self.u,self.m,None,self.z]
-			else:
-				x = [self.u,self.m,None]
+				if self.control_distribution is not None:
+					self.control_distribution.sample(self.z)
+					x = [self.u,self.m,None,self.z]
+				else:
+					x = [self.u,self.m,None]
 
-			self.observable.solveFwd(self.u,x)
-			self.observable.setLinearizationPoint(x)
-			this_m = self.m.get_local()
-			this_q = self.observable.evalu(self.u).get_local()
+				self.observable.solveFwd(self.u,x)
+				self.observable.setLinearizationPoint(x)
+				this_m = self.m.get_local()
+				this_q = self.observable.evalu(self.u).get_local()
 
-
-
-
-			if self.control_distribution is None:
-				np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
-				np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
-
-			else:
-				np.save(data_dir+'mzq_data/m_sample_'+str(i)+'.npy',this_m)
-				np.save(data_dir+'mzq_data/q_sample_'+str(i)+'.npy',this_q)
-				this_z = self.z.get_local()
-				np.save(data_dir+'mzq_data/z_sample_'+str(i)+'.npy',this_z)
-
-			fwd_sample_time = time.time() -t0_samplei
-
-			################################################################################
-			# Derivative computations and saving
-
-			if derivatives[0]:
-				t0_jacobian = time.time()
-				if output_decoder is not None:
-					assert Phi is not None
-					assert JstarPhi is not None
-					JstarPhi.zero()
-					hp.MatMvTranspmult(self.J,MPhi,JstarPhi)
-					JstarPhi_np = hf.mv_to_dense(JstarPhi)
-					np.save(data_dir+'J_data/JstarPhi'+str(i)+'.npy',JstarPhi_np)
-				elif input_decoder is not None:
-					assert Psi is not None
-					assert JPsi is not None
-					JPsi.zero()
-					hp.MatMvMult(self.J,Psi,JPsi)
-					JPsi_np = hf.mv_to_dense(JPsi)
-					np.save(data_dir+'J_data/JPsi'+str(i)+'.npy',JPsi_np)
+				if self.control_distribution is None:
+					np.save(data_dir+'mq_data/m_sample_'+str(i)+'.npy',this_m)
+					np.save(data_dir+'mq_data/q_sample_'+str(i)+'.npy',this_q)
 
 				else:
-					# Compute it with randomized SVD
-					rM = self.settings['rM']
+					np.save(data_dir+'mzq_data/m_sample_'+str(i)+'.npy',this_m)
+					np.save(data_dir+'mzq_data/q_sample_'+str(i)+'.npy',this_q)
+					this_z = self.z.get_local()
+					np.save(data_dir+'mzq_data/z_sample_'+str(i)+'.npy',this_z)
+
+				fwd_sample_time = time.time() -t0_samplei
+
+				################################################################################
+				# Derivative computations and saving
+
+				if derivatives[0]:
+					t0_jacobian = time.time()
+					if output_decoder is not None:
+						assert Phi is not None
+						assert JstarPhi is not None
+						JstarPhi.zero()
+						hp.MatMvTranspmult(self.J,MPhi,JstarPhi)
+						JstarPhi_np = hf.mv_to_dense(JstarPhi)
+						np.save(data_dir+'J_data/JstarPhi'+str(i)+'.npy',JstarPhi_np)
+					elif input_decoder is not None:
+						assert Psi is not None
+						assert JPsi is not None
+						JPsi.zero()
+						hp.MatMvMult(self.J,Psi,JPsi)
+						JPsi_np = hf.mv_to_dense(JPsi)
+						np.save(data_dir+'J_data/JPsi'+str(i)+'.npy',JPsi_np)
+
+					else:
+						# Compute it with randomized SVD
+						rM = self.settings['rM']
+						
+						Omega_m.zero() # probably unecessary
+						hp.parRandom.normal(1.,Omega_m)
+						U, sigma, V = hp.accuracyEnhancedSVD(self.J,Omega_m,rM, s=1)
+						Unp = hf.mv_to_dense(U)
+						Vnp = hf.mv_to_dense(V)
+
+						np.save(data_dir+'J_data/U_sample_'+str(i)+'.npy',Unp)
+						np.save(data_dir+'J_data/sigma_sample_'+str(i)+'.npy',sigma)
+						np.save(data_dir+'J_data/V_sample_'+str(i)+'.npy',Vnp)
+
+					jacobian_time = time.time() - t0_jacobian
+
+				if derivatives[1]:
+					t0_control_jacobian = time.time()
+					if output_decoder is not None:
+						assert MPhi is not None
+						assert JzstarPhi is not None
+						JzstarPhi.zero()
+						hp.MatMvTranspmult(self.Jz,MPhi,JzstarPhi)
+						JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
+						np.save(data_dir+'Jz_data/JzstarPhi'+str(i)+'.npy',JzstarPhi_np)
+					else:
+						Omega_z.zero() # probably unecessary
+						hp.parRandom.normal(1.,Omega_z)
+
+						Uz, sigmaz, Vz = hp.accuracyEnhancedSVD(self.Jz,Omega_z,self.settings['rZ'], s=1)
+						Uznp = hf.mv_to_dense(Uz)
+						Vznp = hf.mv_to_dense(Vz)
+
+						np.save(data_dir+'J_data/Uz_sample_'+str(i)+'.npy',Uznp)
+						np.save(data_dir+'J_data/sigmaz_sample_'+str(i)+'.npy',sigmaz)
+						np.save(data_dir+'J_data/Vz_sample_'+str(i)+'.npy',Vznp)
 					
-					Omega_m.zero() # probably unecessary
-					hp.parRandom.normal(1.,Omega_m)
-					U, sigma, V = hp.accuracyEnhancedSVD(self.J,Omega_m,rM, s=1)
-					Unp = hf.mv_to_dense(U)
-					Vnp = hf.mv_to_dense(V)
+					control_jacobian_time = time.time() - t0_control_jacobian
 
-					np.save(data_dir+'J_data/U_sample_'+str(i)+'.npy',Unp)
-					np.save(data_dir+'J_data/sigma_sample_'+str(i)+'.npy',sigma)
-					np.save(data_dir+'J_data/V_sample_'+str(i)+'.npy',Vnp)
-
-				jacobian_time = time.time() - t0_jacobian
-
-			if derivatives[1]:
-				t0_control_jacobian = time.time()
-				if output_decoder is not None:
-					assert MPhi is not None
-					assert JzstarPhi is not None
-					JzstarPhi.zero()
-					hp.MatMvTranspmult(self.Jz,MPhi,JzstarPhi)
-					JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
-					np.save(data_dir+'Jz_data/JzstarPhi'+str(i)+'.npy',JzstarPhi_np)
-				else:
-					Omega_z.zero() # probably unecessary
-					hp.parRandom.normal(1.,Omega_z)
-
-					Uz, sigmaz, Vz = hp.accuracyEnhancedSVD(self.Jz,Omega_z,self.settings['rZ'], s=1)
-					Uznp = hf.mv_to_dense(Uz)
-					Vznp = hf.mv_to_dense(Vz)
-
-					np.save(data_dir+'J_data/Uz_sample_'+str(i)+'.npy',Uznp)
-					np.save(data_dir+'J_data/sigmaz_sample_'+str(i)+'.npy',sigmaz)
-					np.save(data_dir+'J_data/Vz_sample_'+str(i)+'.npy',Vznp)
-				
-				control_jacobian_time = time.time() - t0_control_jacobian
-
-			################################################################################
-			# Printing
-			if self.settings['verbose']:
-				message = 'Sample '+str(i)+' generation took '+('{:.2f}'.format(fwd_sample_time))+'s'
-				print(message.center(80))
-				if derivatives[0] == 1:
-					messageJ = 'J sample '+str(i)+' generation took '+('{:.2f}'.format(jacobian_time))+'s'
-					print(messageJ.center(80))
-				if derivatives[1] == 1:
-					messageJz = 'Jz sample '+str(i)+' generation took '+('{:.2f}'.format(control_jacobian_time))+'s'
-					print(messageJz.center(80))
+				################################################################################
+				# Printing
+				if self.settings['verbose']:
+					message = 'Sample '+str(i)+' generation took '+('{:.2f}'.format(fwd_sample_time))+'s'
+					print(message.center(80))
+					if derivatives[0] == 1:
+						messageJ = 'J sample '+str(i)+' generation took '+('{:.2f}'.format(jacobian_time))+'s'
+						print(messageJ.center(80))
+					if derivatives[1] == 1:
+						messageJz = 'Jz sample '+str(i)+' generation took '+('{:.2f}'.format(control_jacobian_time))+'s'
+						print(messageJz.center(80))
+			except:
+				print('Issue perhaps with the forward solve, moving on.')
 
 		################################################################################
 		if compress:
