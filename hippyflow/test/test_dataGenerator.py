@@ -108,14 +108,18 @@ class TestdataGenerator(unittest.TestCase):
         output_d, output_decoder, output_encoder, u_shift = pod_constructor.construct_subspace(u_data, 64, shifted=False)
 
         self.datagen.generate(64, derivatives=(1,1), output_decoder=output_decoder, input_decoder=input_decoder)
+        shutil.rmtree('data')
+        # Trying again now to see if it works without the reduced bases
+        print('Computing Jacobians via randomized SVD')
+        self.datagen.generate(64, derivatives=(1,1), output_decoder=None, input_decoder=None)        
 
 
     def _test_two_step_generate(self):
         self.datagen.two_step_generate(64, derivatives=(1,1), pod_rank=64)
 
 
-    def tearDown(self):
-        shutil.rmtree('data')
+    # def tearDown(self):
+    #     shutil.rmtree('data')
 
 
 if __name__ == '__main__':

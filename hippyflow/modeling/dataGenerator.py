@@ -205,9 +205,9 @@ class DataGenerator:
 						Uznp = hf.mv_to_dense(Uz)
 						Vznp = hf.mv_to_dense(Vz)
 
-						np.save(data_dir+'J_data/Uz_sample_'+str(i)+'.npy',Uznp)
-						np.save(data_dir+'J_data/sigmaz_sample_'+str(i)+'.npy',sigmaz)
-						np.save(data_dir+'J_data/Vz_sample_'+str(i)+'.npy',Vznp)
+						np.save(data_dir+'Jz_data/Uz_sample_'+str(i)+'.npy',Uznp)
+						np.save(data_dir+'Jz_data/sigmaz_sample_'+str(i)+'.npy',sigmaz)
+						np.save(data_dir+'Jz_data/Vz_sample_'+str(i)+'.npy',Vznp)
 					
 					control_jacobian_time = time.time() - t0_control_jacobian
 
@@ -330,6 +330,12 @@ class DataGenerator:
 				JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
 				np.save(data_dir+f'Jz_data/JzstarPhi{i}.npy', JzstarPhi_np)
 
+			# del(self.observable.problem.solver_fwd_inc)
+			# try:
+			# 	del(self.observable.problem.solver_adj_inc)
+			# except:
+			# 	pass
+
 		################################################################################
 		if compress:
 			print('Commencing compression'.center(80))
@@ -445,8 +451,6 @@ class DataGenerator:
 				Omega_z = hp.MultiVector(control_vector,nvec_Omega_z)
 				hp.parRandom.normal(1.,Omega_z)
 
-		if derivatives[0] or derivatives[1]:
-			assert MPhi is not None
 
 		if self.dM is None:
 			self.dM = self.m.size()
@@ -582,7 +586,7 @@ def compress_dataset(file_path,derivatives = (0,0), clean_up = True,\
 			rZ = np.load(file_path+'/Jz_data/JzPsi'+str(index)+'.npy').shape[1]
 			JzPsi_data = np.zeros((ndata,dQ,rZ))
 		if compress_Jzsvd:
-			rank = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy').shape[1]
+			rank = np.load(file_path+'/Jz_data/sigmaz_sample_'+str(index)+'.npy').shape[0]
 			Uz_data = np.zeros((ndata,dQ,rank))
 			sigmaz_data = np.zeros((ndata,rank))
 			Vz_data = np.zeros((ndata,dZ,rank))
