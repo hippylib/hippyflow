@@ -117,7 +117,9 @@ class DataGenerator:
 		if self.settings['verbose']:
 			print(80*'#')
 
-		for i in range(n_samples):
+		# Begin iteration index
+		i = 0
+		while i < n_samples:
 			try:
 				t0_samplei = time.time()
 				################################################################################
@@ -220,6 +222,7 @@ class DataGenerator:
 					if derivatives[1] == 1:
 						messageJz = 'Jz sample '+str(i)+' generation took '+('{:.2f}'.format(control_jacobian_time))+'s'
 						print(messageJz.center(80))
+				i += 1
 			except:
 				print('Issue perhaps with the forward solve, moving on.')
 
