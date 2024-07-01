@@ -1,4 +1,4 @@
-# Copyright (c) 2020-2022, The University of Texas at Austin 
+# Copyright (c) 2020-2023, The University of Texas at Austin 
 # & Washington University in St. Louis.
 #
 # All Rights reserved.
@@ -36,28 +36,37 @@ def KLEParameterList():
 	parameters['rank'] 				 		= [128, 'Rank of subspace']
 	parameters['oversampling'] 		 		= [10, 'Oversampling parameter for randomized algorithms']
 	parameters['verbose']					= [True, 'Boolean for printing']
-	parameters['output_directory']			= [None,'output directory for saving arrays and plots']
+	parameters['output_directory']			= ['./data/','output directory for saving arrays and plots']
 	parameters['plot_label_suffix']			= ['', 'suffix for plot label']
+	parameters['save_and_plot']				= [True, 'save and plot or not']
+
+	parameters['input_decoder_name']			= ['KLE_decoder', 'string for naming']
 
 	return hp.ParameterList(parameters)
 
-class MRinvM:
-	"""
-	MRinvM implements the action of :math:`MR^{-1}M` for a BiLaplacianPrior
-	"""
+class MassPreconditionedCovarianceOperator:
+	def __init__(self, C, M):
+		"""
+		Linear operator representing the mass matrix preconditioned
+		covariance matrix :math:`M C M`
+		"""
+		self.C = C 
+		self.M = M 
+		self.mpi_comm = self.M.mpi_comm()
 
-	def __init__(self,Rsolver,M):
-		self.Rsolver = Rsolver
-		self.M = M
-		self.help = dl.Vector(self.M.mpi_comm())
-		self.M.init_vector(self.help,1)
+
+		self.Mx = dl.Vector(self.mpi_comm)
+		self.CMx = dl.Vector(self.mpi_comm)
+		self.M.init_vector(self.Mx, 0)
+		self.M.init_vector(self.CMx, 0)
 
 	def init_vector(self,x,dim):
 		self.M.init_vector(x,dim)
 
-	def mult(self,x,y):
-		self.Rsolver.solve(self.help,self.M*x)
-		self.M.mult(self.help,y)
+	def mult(self, x, y):
+		self.M.mult(x, self.Mx)
+		self.C.mult(self.Mx, self.CMx)
+		self.M.mult(self.CMx, y)
 
 
 
@@ -91,6 +100,8 @@ class KLEProjector:
 
 		self.noise = None
 
+		self.C = hp.Solver2Operator(self.prior.Rsolver, mpi_comm=self.mesh_constructor_comm)
+
 
 		consistent_partitioning = checkMeshConsistentPartitioning(\
 							self.prior.Vh.mesh(), self.collective)
@@ -116,9 +127,13 @@ class KLEProjector:
 		self.collective.bcast(Omega,root = 0)
 		return Omega
 
+		self.kle_decoder = None
+		self.kle_encoder = None
+	
 
 
-	def construct_input_subspace(self,M_orthogonal = True):
+
+	def construct_input_subspace(self,orthogonality = 'mass'):
 		"""
 		This method computes the KLE subspace
 			- :code:`M_orthogonal` - Boolean about whether the vectors are made to be mass matrix orthogonal
@@ -126,7 +141,9 @@ class KLEProjector:
 		t0 = time.time()
 		assert hasattr(self.prior,'Rsolver') and hasattr(self.prior,'M') and hasattr(self.prior,'Msolver')
 
-		KLE_Operator = MRinvM(self.prior.Rsolver,self.prior.M)
+
+
+		KLE_Operator = MassPreconditionedCovarianceOperator(self.C,self.prior.M)
 
 		# Totally unnecessary averaging that I am doing in order to keep the code consistent
 		Average_KLE_Operator = CollectiveOperator(KLE_Operator, self.collective, mpi_op = 'avg')
@@ -142,28 +159,44 @@ class KLEProjector:
 
 		self.collective.bcast(Omega,root = 0)
 
-		if M_orthogonal:
+		if orthogonality.lower() == 'mass':
 			self.d_KLE, self.V_KLE = hp.doublePassG(KLE_Operator,\
 				self.prior.M, self.prior.Msolver, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = True
-		else:
+			kle_decoder = self.V_KLE
+			kle_encoder = hp.MultiVector(kle_decoder)
+			hp.MatMvMult(self.prior.M,kle_decoder,kle_encoder)
+
+		elif orthogonality.lower() == 'prior':
+			prior_orth_KLE_constructor = KLESubspaceConstructorSLEPc(self.prior)
+			self.d_KLE, kle_decoder, kle_encoder = prior_orth_KLE_constructor.compute_kle_subspace(self.parameters['rank'])
+			self.V_KLE = kle_decoder
+
+		elif orthogonality.lower() == 'identity':
 			RsolverOperator = hp.Solver2Operator(self.prior.Rsolver)
 			self.d_KLE, self.V_KLE = hp.doublePass(RsolverOperator, Omega,self.parameters['rank'],s=1)
 			self.M_orthogonal = False
+			kle_decoder = self.V_KLE
+			kle_encoder = hp.MultiVector(kle_decoder) #copy constructor
+
+		else: 
+			raise
 
 		self._subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 			print('Construction of input subspace took ',self._subspace_construction_time,'s')
 			# print('Input subspace eigenvalues = ',self.d_GN)
 
-		if True and MPI.COMM_WORLD.rank == 0:
-			np.save(self.parameters['output_directory']+'KLE_projector',mv_to_dense(self.V_KLE))
+		if True and MPI.COMM_WORLD.rank == 0 and self.parameters['save_and_plot']:
+			np.save(self.parameters['output_directory']+self.parameters['input_decoder_name'],mv_to_dense(self.V_KLE))
 			np.save(self.parameters['output_directory']+'KLE_d',self.d_KLE)
 
 			out_name = self.parameters['output_directory']+'KLE_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_KLE,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $C$'+self.parameters['plot_label_suffix']], out_name = out_name)
+
+		return self.d_KLE, kle_decoder, kle_encoder
 
 
 	def test_errors(self, ranks = [None],cut_off = 1e-12):
@@ -247,3 +280,58 @@ class KLEProjector:
 				print('Naive global average relative error input = ',global_avg_rel_errors[rank_index],' for rank ',rank)
 
 		return global_avg_rel_errors, global_std_rel_errors
+
+
+class KLESubspaceConstructorSLEPc:
+	"""
+	Class for a matern Gaussian constructed from an elliptic operator
+	"""
+	def __init__(self, hp_prior):
+		assert hasattr(hp_prior, "A")
+		assert hasattr(hp_prior, "M")
+		assert hasattr(hp_prior, "R")
+		self._hp_prior = hp_prior
+		self.R = self._hp_prior.R
+		self.Vh = self._hp_prior.Vh
+		self.A = dl.as_backend_type(self._hp_prior.A)
+		self.M = dl.as_backend_type(self._hp_prior.M)
+		self.eigensolver = dl.SLEPcEigenSolver(self.A, self.M)
+		self.eigensolver.parameters["solver"] = "krylov-schur"
+		self.eigensolver.parameters["problem_type"] = "gen_hermitian"
+		self.eigensolver.parameters["spectrum"] = "target magnitude"
+		self.eigensolver.parameters["spectral_transform"] = "shift-and-invert"
+		self.eigensolver.parameters["spectral_shift"] = 0.0
+
+		self.m = dl.Function(self.Vh).vector()
+
+	def mpi_comm(self):
+		return self.R.mpi_comm()
+
+	def compute_kle_subspace(self, rank):
+		"""
+		Compute the KLE basis using :code:`dl.SLEPcEigenSolver`
+		:param rank: number of eigenpairs
+		"""
+		print("Solving eigenvalue problem")
+		self.eigensolver.solve(rank)
+		sqrt_precision_eigenvalues = np.zeros(rank)
+
+		print("Initializing multivectors")
+		kle_decoder = hp.MultiVector(self.m, rank)
+		kle_encoder = hp.MultiVector(self.m, rank)
+
+		kle_decoder.zero()
+		kle_encoder.zero()
+
+
+		for i in range(rank):
+			sqrt_precision_eigenvalues[i], _, basis_i, _ = self.eigensolver.get_eigenpair(i)
+			kle_decoder[i].axpy(1.0/sqrt_precision_eigenvalues[i], basis_i)
+
+		covariance_eigenvalues = 1/sqrt_precision_eigenvalues**2
+
+		hp.MatMvMult(self.R, kle_decoder, kle_encoder)
+		return covariance_eigenvalues, kle_decoder, kle_encoder
+
+
+

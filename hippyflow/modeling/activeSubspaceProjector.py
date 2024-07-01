@@ -45,6 +45,10 @@ def ActiveSubspaceParameterList():
 	parameters['double_loop_samples']		= [20, 'Number of samples used in double loop MC approximation']
 	parameters['verbose']					= [True, 'Boolean for printing']
 
+	parameters['input_decoder_name']			= ['_input_decoder', 'string for naming']
+	parameters['output_decoder_name']			= ['_output_decoder', 'string for naming']
+
+
 
 	parameters['initialize_samples'] 		= [False,'Boolean for the initialization of samples when\
 														many samples are allocated on one process ']
@@ -124,7 +128,14 @@ class SeriallySampledJacobianOperator:
 			self.temp = dl.Vector(communicator)
 
 		self.u = self.observable.generate_vector(hp.STATE)
-		self.m = self.observable.generate_vector(hp.PARAMETER)
+		if hasattr(self.observable.problem,'parameter_projection'):
+			if communicator is not None:
+				self.m = dl.Vector(communicator)
+			else:
+				self.m = dl.Vector()
+			self.prior.init_vector(self.m,0)
+		else:
+			self.m = self.observable.generate_vector(hp.PARAMETER)
 		if self.control_distribution is None:
 			self.z = None
 		else:
@@ -142,7 +153,10 @@ class SeriallySampledJacobianOperator:
 		if self.operation == 'JJT':
 			self.observable.init_vector(x,0)
 		elif self.operation == 'JTJ':
-			self.observable.init_vector(x,1)
+			if hasattr(self.observable.problem,'parameter_projection'):
+				self.prior.init_vector(x,0)
+			else:
+				self.observable.init_vector(x,1)
 		else: 
 			raise
 
@@ -165,6 +179,7 @@ class SeriallySampledJacobianOperator:
 				# Iterate if there are solver issues
 				solved = False
 				while not solved:
+					iterate = 0
 					try:
 						# Sample from the prior
 						self.m.zero()
@@ -177,7 +192,10 @@ class SeriallySampledJacobianOperator:
 							self.z.zero()
 							self.control_distribution.sample(self.z)
 							linearization_x = [self.u,self.m,None,self.z]
-
+						if hasattr(self.observable.problem,'parameter_projection'):
+							# In this case the parameter needs to be projected to subdomain
+							m_sample = self.observable.problem.parameter_projection(self.m)
+							linearization_x[1] = m_sample
 
 						# Solve the PDE
 						print('Attempting to solve')
@@ -189,7 +207,9 @@ class SeriallySampledJacobianOperator:
 						solved = True
 					except:
 						print('Issue with the solution, moving on')
-						pass
+						iterate += 1
+					if iterate > 100:
+						print('Some sort of issue, no infinite loop allowed (+:')
 				# Define action on matrix (as represented by hp.MultiVector)
 				for j in range(x.nvec()):
 					temp.zero()
@@ -348,6 +368,9 @@ class ActiveSubspaceProjector:
 						x = [u,m,None,z]
 					else:
 						x = [u,m,None]
+					if hasattr(self.observable.problem,'parameter_projection'):
+						m_sample = self.observable.problem.parameter_projection(m)
+						x[1] = m_sample
 					observable.solveFwd(u,x)
 					observable.setLinearizationPoint(x)
 					solved = True
@@ -377,10 +400,10 @@ class ActiveSubspaceProjector:
 	def construct_input_subspace(self,prior_preconditioned = True,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized AS construction'.center(80))
-			self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
+			return self._construct_serialized_jacobian_subspace(prior_preconditioned = prior_preconditioned,operation = 'JTJ')
 		else:
 			print('Construction via batched AS construction'.center(80))
-			self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned,name_suffix = name_suffix)
+			return self._construct_input_subspace_batched(prior_preconditioned = prior_preconditioned,name_suffix = name_suffix)
 
 
 
@@ -425,11 +448,20 @@ class ActiveSubspaceProjector:
 			if hasattr(self.prior, "R"):
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
+				hp.MatMvMult(self.prior.R,as_decoder,as_encoder)
 			else:
 				self.d_GN, self.V_GN = hp.doublePassG(Average_GN_Hessian,\
 					self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
+				hp.MatMvMult(self.prior.Hlr,as_decoder,as_encoder)
 		else:
 			self.d_GN, self.V_GN = hp.doublePass(Average_GN_Hessian,Omega,self.parameters['rank'],s=1)
+			as_decoder = self.V_GN
+			as_encoder = hp.MultiVector(as_decoder)
+
 		total_init_time = time.time() - t0
 		for i in range(100):
 			print(80*'#')
@@ -444,13 +476,15 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+			np.save(self.parameters['output_directory']+name+self.parameters['input_decoder_name'],mv_to_dense(self.V_GN))
 			np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 
 			plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_GN,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+
+		return self.d_GN, as_decoder, as_encoder
 
 	def _construct_serialized_jacobian_subspace(self,prior_preconditioned = True, operation = 'JTJ',name_suffix = None):
 		"""
@@ -480,6 +514,9 @@ class ActiveSubspaceProjector:
 			# If this is the case, then the KKT blocks have not been built yet
 			# we overcome this by solving somewhere and setting the linearization pt.
 			m_mean = self.prior.mean
+			if hasattr(self.observable.problem,'parameter_projection'):
+				m_mean = self.observable.problem.parameter_projection(m_mean)
+
 			u_at_mean = self.observable.problem.generate_state()
 			if self.control_distribution is not None:
 				if hasattr(self.control_distribution,'mean'):
@@ -518,48 +555,72 @@ class ActiveSubspaceProjector:
 				if hasattr(self.prior, "R"):
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.R, self.prior.Rsolver, Omega,self.parameters['rank'],s=1)
+					as_decoder = self.V_GN
+					as_encoder = hp.MultiVector(as_decoder)
+					hp.MatMvMult(self.prior.R,as_decoder,as_encoder)
 				else:
 					self.d_GN, self.V_GN = hp.doublePassG(Average_Jacobian_Operator,\
 						self.prior.Hlr, self.prior.Hlr, Omega,self.parameters['rank'],s=1)
+					as_decoder = self.V_GN
+					as_encoder = hp.MultiVector(as_decoder)
+					hp.MatMvMult(self.prior.Hlr,as_decoder,as_encoder)
 			else:
 				self.d_GN, self.V_GN = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+				as_decoder = self.V_GN
+				as_encoder = hp.MultiVector(as_decoder)
 			self.prior_preconditioned = prior_preconditioned
 			self._input_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank == 0):	
 				print(('Input subspace construction took '+str(self._input_subspace_construction_time)[:5]+' s').center(80))
+
 		elif operation == 'JJT':
 			self.d_NG, self.U_NG = hp.doublePass(Average_Jacobian_Operator,Omega,self.parameters['rank'],s=1)
+			output_decoder = self.U_NG
+			output_encoder = hp.MultiVector(output_decoder)
+
 			self._output_subspace_construction_time = time.time() - t0
 			if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 				print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
-		
+			
+
 		if self.parameters['save_and_plot'] and MPI.COMM_WORLD.rank == 0:
 			name = 'AS_'+str(int(self.parameters['samples_per_process']*self.collective.size()))
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
 			if operation == 'JTJ':
-				np.save(self.parameters['output_directory']+name+'_input_projector',mv_to_dense(self.V_GN))
+				np.save(self.parameters['output_directory']+name+self.parameters['input_decoder_name'],mv_to_dense(self.V_GN))
 				np.save(self.parameters['output_directory']+name+'_d_GN',self.d_GN)
 				plot_out_name = self.parameters['output_directory']+name+'_input_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_GN,\
-					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				try:
+					_ = spectrum_plot(self.d_GN,\
+						axis_label = ['i',r'$\lambda_i$',\
+						r'Eigenvalues of $\mathbb{E}_{\nu}[C{\nabla} q^T {\nabla} q]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				except:
+					print('Issue plotting, probably latex related')
 			if operation == 'JJT':
-				np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+				np.save(self.parameters['output_directory']+name+self.parameters['output_decoder_name'],mv_to_dense(self.U_NG))
 				np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 				plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
-				_ = spectrum_plot(self.d_NG,\
-					axis_label = ['i',r'$\lambda_i$',\
-					r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				try:
+					_ = spectrum_plot(self.d_NG,\
+						axis_label = ['i',r'$\lambda_i$',\
+						r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+				except:
+					print('Issue plotting, probably, latex related')
+
+		if operation == 'JTJ':
+			return self.d_GN, as_decoder, as_encoder
+		elif operation == 'JJT':
+			return self.d_NG, output_decoder, output_encoder
 
 	def construct_output_subspace(self,name_suffix = None):
 		if self.parameters['serialized_sampling']:
 			print('Construction via serialized construction'.center(80))
-			self._construct_serialized_jacobian_subspace(operation = 'JJT',name_suffix = name_suffix)
+			return self._construct_serialized_jacobian_subspace(operation = 'JJT',name_suffix = name_suffix)
 		else:
-			self._construct_output_subspace_batched(name_suffix = name_suffix)
+			return self._construct_output_subspace_batched(name_suffix = name_suffix)
 
 	def _construct_output_subspace_batched(self,name_suffix = None):
 		"""
@@ -591,6 +652,8 @@ class ActiveSubspaceProjector:
 
 		self.collective.bcast(Omega,root = 0)
 		self.d_NG, self.U_NG = hp.doublePass(Average_NG_Hessian,Omega,self.parameters['rank'],s=1)
+		output_decoder = self.U_NG
+		output_encoder = hp.MultiVector(output_decoder)
 		self._output_subspace_construction_time = time.time() - t0
 		if self.parameters['verbose'] and (self.mesh_constructor_comm.rank ==0):	
 			print(('Output subspace construction took '+str(self._output_subspace_construction_time)[:5]+' s').center(80))
@@ -599,13 +662,16 @@ class ActiveSubspaceProjector:
 			if name_suffix is not None:
 				assert type(name_suffix) is str
 				name += name_suffix
-			np.save(self.parameters['output_directory']+name+'_output_projector',mv_to_dense(self.U_NG))
+			np.save(self.parameters['output_directory']+name+self.parameters['output_decoder_name'],mv_to_dense(self.U_NG))
 			np.save(self.parameters['output_directory']+name+'_d_NG',self.d_NG)
 
 			plot_out_name = self.parameters['output_directory']+name+'_output_eigenvalues_'+str(self.parameters['rank'])+'.pdf'
 			_ = spectrum_plot(self.d_NG,\
 				axis_label = ['i',r'$\lambda_i$',\
 				r'Eigenvalues of $\mathbb{E}_{\nu}[{\nabla} q {\nabla} q^T]$'+self.parameters['plot_label_suffix']], out_name = plot_out_name)
+
+		return self.d_NG, output_decoder, output_encoder
+
 
 	def construct_low_rank_Jacobians(self,check_for_data = True,compress_files = True):
 		if self.parameters['serialized_sampling']:
@@ -726,9 +792,17 @@ class ActiveSubspaceProjector:
 				x = [self.u,self.m,None,self.z]
 			else:
 				x = [self.u,self.m,None]
+			if hasattr(self.observable.problem,'parameter_projection'):
+				# In this case the parameter needs to be projected to subdomain
+				m_sample = self.observable.problem.parameter_projection(self.m)
+				x[1] = m_sample
 			self.observable.solveFwd(self.u,x)
 			self.observable.setLinearizationPoint(x)
-			this_m = self.m.get_local()
+			if hasattr(self.observable.problem,'parameter_projection'):
+				# In this case the parameter needs to be projected to subdomain
+				this_m = m_sample.get_local()
+			else:
+				this_m = self.m.get_local()
 			this_q = self.observable.evalu(self.u).get_local()
 			np.save(process_specific_directory+'m_sample_'+str(i)+'.npy',this_m)
 			np.save(process_specific_directory+'q_sample_'+str(i)+'.npy',this_q)
@@ -1011,6 +1085,7 @@ class ActiveSubspaceProjector:
 				t0 = time.time()
 				hp.parRandom.normal(1,self.noise)
 				self.prior.sample(self.noise,LocalParameters[i])
+
 
 			LocalErrors = hp.MultiVector(self.ms[0],self.parameters['error_test_samples'])
 			projection_vector = self.observable.generate_vector(hp.PARAMETER) 

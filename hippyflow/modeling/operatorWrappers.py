@@ -55,7 +55,7 @@ class npToDolfinOperator:
 class MeanJTJfromDataOperator:
 	"""
 	"""
-	def __init__(self, J, prior):
+	def __init__(self, J, prior, noise_cov_inv=None):
 		"""
 		"""
 
@@ -63,6 +63,10 @@ class MeanJTJfromDataOperator:
 		self._J = J
 		self.ndata, self.r, self.dM = self.J.shape
 		self._prior = prior
+
+		if noise_cov_inv is not None:
+			assert hasattr(noise_cov_inv, '__matmul__')
+		self._noise_cov_inv = noise_cov_inv
 
 		if hasattr(self.prior, "R"):
 			self.init_vector_lambda = lambda x,dim: prior.R.init_vector(x,dim)
@@ -76,6 +80,10 @@ class MeanJTJfromDataOperator:
 	@property
 	def prior(self):
 		return self._prior
+	
+	@property
+	def noise_cov_inv(self):
+		return self._noise_cov_inv
 	
 	def init_vector(self,x,dim):
 		"""
@@ -94,6 +102,12 @@ class MeanJTJfromDataOperator:
 		# print('X_np.shape = ',X_np.shape)
 		assert X_np.shape == (self.ndata,self.dM)
 		JX_np = np.einsum('ijk,ik->ij',self.J,X_np)
+
+		# compute with noise covariance, if present
+		if self.noise_cov_inv is not None:
+			# JX_np = self.noise_cov_inv @ JX_np
+			JX_np = np.einsum('ij,kj->ki', self.noise_cov_inv, JX_np)
+
 		# print('PhiTJX_np.shape = ',JX_np.shape)
 		JTJX_np = np.einsum('ijk,ij->ik',self.J,JX_np)
 		# print('JTPhiPhiTJX_np.shape = ',JTJX_np.shape)

@@ -181,7 +181,6 @@ POD.generate_training_data(output_directory)
 These publications use the hippyflow library
 
 - \[1\] O'Leary-Roseberry, T., Villa, U., Chen P., Ghattas O.,
-
 [**Derivative-Informed Projected Neural Networks for High-Dimensional Parametric Maps Governed by PDEs**](https://www.sciencedirect.com/science/article/pii/S0045782521005302).
 Computer Methods in Applied Mechanics and Engineering. Volume 388, 1 January 2022, 114199.
 ([Download](https://www.sciencedirect.com/science/article/pii/S0045782521005302))<details><summary>BibTeX</summary><pre>
@@ -238,5 +237,44 @@ Journal of Computational Physics, 112104
   pages={112104},
   year={2023},
   publisher={Elsevier}
+}
+}</pre></details>
+
+
+- \[5\] O'Leary-Roseberry, T., Chen P., Villa, U., Ghattas, O.,
+[**Derivative-Informed Neural Operator: An Efficient Framework for High-Dimensional Parametric Derivative Learning**](https://arxiv.org/abs/2206.10745).
+Journal of Computational Physics, 112555
+([Download](https://arxiv.org/abs/2206.10745))<details><summary>BibTeX</summary><pre>
+@article{OLearyRoseberryChenVillaEtAl22,
+  title={Derivative-Informed Neural Operator: an efficient framework for high-dimensional parametric derivative learning},
+  author={O’Leary-Roseberry, THOMAS and Chen, Peng and Villa, Umberto and Ghattas, Omar},
+  journal={Journal of Computational Physics},
+  pages={112555},
+  year={2024},
+  publisher={Elsevier}
+}
+}</pre></details>
+
+
+- \[6\] Luo, D., O'Leary-Roseberry, T., Chen P., Ghattas, O.,
+[**Efficient PDE-Constrained optimization under high-dimensional uncertainty using derivative-informed neural operators**](https://arxiv.org/abs/2305.20053).
+([Download](https://arxiv.org/abs/2305.20053))<details><summary>BibTeX</summary><pre>
+@article{luo2023efficient,
+  title={Efficient PDE-Constrained optimization under high-dimensional uncertainty using derivative-informed neural operators},
+  author={Luo, Dingcheng and O'Leary-Roseberry, Thomas and Chen, Peng and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2305.20053},
+  year={2023}
+}
+}</pre></details>
+
+
+- \[7\] Cao, L., O'Leary-Roseberry, T., Ghattas, O.,
+[**Derivative-Informed Neural Operator Acceleration of Geometric MCMC for Infinite-Dimensional Bayesian Inverse Problems**](https://arxiv.org/abs/2403.08220).
+([Download](https://arxiv.org/pdf/2403.08220))<details><summary>BibTeX</summary><pre>
+@article{cao2024derivative,
+  title={Derivative-informed neural operator acceleration of geometric MCMC for infinite-dimensional Bayesian inverse problems},
+  author={Cao, Lianghao and O'Leary-Roseberry, Thomas and Ghattas, Omar},
+  journal={arXiv preprint arXiv:2403.08220},
+  year={2024}
 }
 }</pre></details>
