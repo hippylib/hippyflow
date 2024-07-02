@@ -118,8 +118,8 @@ class TestdataGenerator(unittest.TestCase):
         self.datagen.two_step_generate(64, derivatives=(1,1), pod_rank=64)
 
 
-    # def tearDown(self):
-    #     shutil.rmtree('data')
+    def tearDown(self):
+        shutil.rmtree('data')
 
 
 if __name__ == '__main__':
