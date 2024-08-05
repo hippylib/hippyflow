@@ -276,6 +276,7 @@ class DataGenerator:
 		np.save(data_dir+f'/POD/POD_decoder.npy',phi)
 		np.save(data_dir+f'/POD/POD_encoder.npy',Mphi)
 		np.save(data_dir+f'/POD/d_POD.npy',d_POD)
+		np.save(data_dir+f'/POD/POD_shift.npy', u_shift)
 
 		# Step 2.
 		self.compute_jacobians_in_subspace(derivatives = derivatives, output_decoder = phi, output_encoder = Mphi,\
