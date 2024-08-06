@@ -28,7 +28,7 @@ def data_generator_settings(settings = {}):
 	settings['rM'] = None
 	settings['rZ'] = None
 	settings['oversample'] = 10
-
+	settings['reset_initial_guess'] = False
 	settings['verbose'] = True
 
 	return settings
@@ -127,6 +127,8 @@ class DataGenerator:
 				self.parRandom.normal(1,self.noise)
 
 				self.m.zero()
+				if self.settings['reset_initial_guess']:
+					self.u.zero()
 				self.prior.sample(self.noise,self.m)
 
 				if self.control_distribution is not None:
