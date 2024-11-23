@@ -37,7 +37,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 version = {}
-with open(path.join(here, 'hippylib/version.py')) as f:
+with open(path.join(here, 'hippyflow/version.py')) as f:
     exec(f.read(), version)
 
 VERSION = version['__version__']
