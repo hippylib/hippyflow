@@ -36,7 +36,7 @@
 [![Latest commit](https://img.shields.io/github/last-commit/hippylib/hippyflow)](https://github.com/hippylib/hippyflow/commits/master)
 
 
-* This code is used to construct dimension reduced neural network surrogeates for parametric mappings governed by PDEs
+* This code is used to construct dimension reduced neural network surrogates for parametric mappings governed by PDEs
 
 * [`hIPPYlib`](https://github.com/hippylib/hippylib) is used for the data generation and construction of model based projectors
 
