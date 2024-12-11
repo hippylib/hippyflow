@@ -29,6 +29,7 @@ def data_generator_settings(settings = {}):
 	settings['rZ'] = None
 	settings['oversample'] = 10
 	settings['reset_initial_guess'] = False
+	settings['save_failed_solves'] = True 
 	settings['verbose'] = True
 
 	return settings
@@ -231,9 +232,11 @@ class DataGenerator:
 				i += 1
 			except:
 				exceptions_count += 1
-				os.makedirs(data_dir+'/skipped/',exist_ok=True)
-				np.save(data_dir+'skipped/z_sample_'+str(exceptions_count)+'.npy',self.z.get_local())
-				np.save(data_dir+'skipped/m_sample_'+str(exceptions_count)+'.npy',self.m.get_local())
+				if self.settings['save_failed_solves']:
+					os.makedirs(data_dir+'/skipped/',exist_ok=True)
+					np.save(data_dir+'skipped/m_sample_'+str(exceptions_count)+'.npy',self.m.get_local())
+					if self.z is not None:
+						np.save(data_dir+'skipped/z_sample_'+str(exceptions_count)+'.npy',self.z.get_local())
 				print('Issue perhaps with the forward solve, moving on.')
 		
 		print(f"Total exceptions: {exceptions_count}")
