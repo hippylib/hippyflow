@@ -28,7 +28,8 @@ def data_generator_settings(settings = {}):
 	settings['rM'] = None
 	settings['rZ'] = None
 	settings['oversample'] = 10
-
+	settings['reset_initial_guess'] = False
+	settings['save_failed_solves'] = True 
 	settings['verbose'] = True
 
 	return settings
@@ -119,6 +120,7 @@ class DataGenerator:
 
 		# Begin iteration index
 		i = 0
+		exceptions_count = 0
 		while i < n_samples:
 			try:
 				t0_samplei = time.time()
@@ -127,10 +129,15 @@ class DataGenerator:
 				self.parRandom.normal(1,self.noise)
 
 				self.m.zero()
+				if self.settings['reset_initial_guess']:
+					self.u.zero()
+					print('reset init guess')
 				self.prior.sample(self.noise,self.m)
+				print('sampled m', self.m.get_local())
 
 				if self.control_distribution is not None:
 					self.control_distribution.sample(self.z)
+					print('sampled z', self.z.get_local())
 					x = [self.u,self.m,None,self.z]
 				else:
 					x = [self.u,self.m,None]
@@ -224,7 +231,15 @@ class DataGenerator:
 						print(messageJz.center(80))
 				i += 1
 			except:
+				exceptions_count += 1
+				if self.settings['save_failed_solves']:
+					os.makedirs(data_dir+'/skipped/',exist_ok=True)
+					np.save(data_dir+'skipped/m_sample_'+str(exceptions_count)+'.npy',self.m.get_local())
+					if self.z is not None:
+						np.save(data_dir+'skipped/z_sample_'+str(exceptions_count)+'.npy',self.z.get_local())
 				print('Issue perhaps with the forward solve, moving on.')
+		
+		print(f"Total exceptions: {exceptions_count}")
 
 		################################################################################
 		if compress:
@@ -262,7 +277,7 @@ class DataGenerator:
 			all_data = np.load(data_dir+'mq_data.npz')
 		u_data = all_data['q_data'][:n_samples_pod]
 		POD = hf.PODProjectorFromData(self.observable.problem.Vh)
-		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank,method = pod_method,verify = True)
+		d_POD, phi, Mphi, u_shift = POD.construct_subspace(u_data,pod_rank,shifted = pod_shifted, method = pod_method,verify = True)
 		if True:
 			u_rank_verify = pod_rank
 			if pod_shifted:
@@ -276,6 +291,7 @@ class DataGenerator:
 		np.save(data_dir+f'/POD/POD_decoder.npy',phi)
 		np.save(data_dir+f'/POD/POD_encoder.npy',Mphi)
 		np.save(data_dir+f'/POD/d_POD.npy',d_POD)
+		np.save(data_dir+f'/POD/POD_shift.npy', u_shift)
 
 		# Step 2.
 		self.compute_jacobians_in_subspace(derivatives = derivatives, output_decoder = phi, output_encoder = Mphi,\
