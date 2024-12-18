@@ -133,11 +133,11 @@ class DataGenerator:
 					self.u.zero()
 					print('reset init guess')
 				self.prior.sample(self.noise,self.m)
-				print('sampled m', self.m.get_local())
+				# print('sampled m', self.m.get_local())
 
 				if self.control_distribution is not None:
 					self.control_distribution.sample(self.z)
-					print('sampled z', self.z.get_local())
+					# print('sampled z', self.z.get_local())
 					x = [self.u,self.m,None,self.z]
 				else:
 					x = [self.u,self.m,None]
