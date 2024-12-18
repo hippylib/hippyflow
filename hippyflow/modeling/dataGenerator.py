@@ -234,9 +234,9 @@ class DataGenerator:
 				exceptions_count += 1
 				if self.settings['save_failed_solves']:
 					os.makedirs(data_dir+'/skipped/',exist_ok=True)
-					np.save(data_dir+'skipped/m_sample_'+str(exceptions_count)+'.npy',self.m.get_local())
+					np.save(data_dir+'/skipped/m_sample_'+str(exceptions_count)+'.npy',self.m.get_local())
 					if self.z is not None:
-						np.save(data_dir+'skipped/z_sample_'+str(exceptions_count)+'.npy',self.z.get_local())
+						np.save(data_dir+'/skipped/z_sample_'+str(exceptions_count)+'.npy',self.z.get_local())
 				print('Issue perhaps with the forward solve, moving on.')
 		
 		print(f"Total exceptions: {exceptions_count}")
