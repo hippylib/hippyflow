@@ -27,7 +27,7 @@ from .hippylibModelWrapper import hippylibModelWrapper, hippylibModelWrapperSett
 
 from .jacobian import Jacobian, ObservableJacobian, JJT, JTJ
 
-from .KLEProjector import KLEProjector, KLEParameterList
+from .KLEProjector import KLEProjector, KLEParameterList, BoundaryRestrictedKLEProjector
 
 from .lowRankRectangularOperator import LowRankRectangularOperator
 
