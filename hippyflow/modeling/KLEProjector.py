@@ -252,7 +252,7 @@ class KLEProjector:
 				V_KLE = self.V_KLE
 				d_KLE = self.d_KLE
 			else:
-				V_KLE = MultiVector(self.V_KLE[0],rank)
+				V_KLE = hp.MultiVector(self.V_KLE[0],rank)
 				d_KLE = self.d_KLE[0:rank]
 				for i in range(rank):
 					V_KLE[i].axpy(1.,self.V_KLE[i])
