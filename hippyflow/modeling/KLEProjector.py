@@ -334,6 +334,7 @@ class KLESubspaceConstructorSLEPc:
         return covariance_eigenvalues, kle_decoder, kle_encoder
 
 
+# todo: add method with a priori basis
 class BoundaryRestrictedKLEProjector:
     """Prior-based KLE subspace projector for bouundary data.
     """
@@ -365,8 +366,6 @@ class BoundaryRestrictedKLEProjector:
         """Construct the boundary restricted mass matrix.
 
         Args:
-            Vh (dl.FunctionSpace): The function space.
-            ds (dl.Measure): The boundary measure.
             fill_nullspace (bool, optional): Whether or not to fill . Defaults to False.
 
         Returns:
@@ -405,11 +404,7 @@ class BoundaryRestrictedKLEProjector:
         # todo: add construction time reporting
         # todo: add saving and plotting options
         # todo: add error test
-
-        Args:
-            rank (int): Rank of the KLE subspace.
-            oversampling (int): Oversampling parameter for the randomized eigensolve.
-            as_numpy (bool, optional): Whether to cast to NumPy array. Defaults to True.
+        # todo: add option for numpy return
 
         Returns:
             tuple: eigenvalues (np.array), KLE decode (hp.MultiVector), KLE encoder (hp.MultiVector)
