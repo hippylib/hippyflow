@@ -17,7 +17,7 @@ from .blockVector import BlockVector
 
 from .cMinimization import ConstrainedNSolver
 
-from .dataGenerator import DataGenerator, compress_dataset
+from .dataGenerator import DataGenerator, compress_dataset, data_generator_settings
 
 from .controlJacobian import ObservableControlJacobian
 
