@@ -294,11 +294,12 @@ class DataGenerator:
 
 		# Step 2.
 		self.compute_jacobians_in_subspace(derivatives = derivatives, output_decoder = phi, output_encoder = Mphi,\
-						 data_file_name = data_file_name, data_dir = data_dir, compress_derivatives_only = True)
+						 data_file_name = data_file_name, data_dir = data_dir, compress = compress, clean_up = clean_up)
 
 
 	def compute_jacobians_in_subspace(self, derivatives, output_decoder,  data_file_name, data_dir, output_encoder = None,\
-			compress=True, clean_up=True,compress_derivatives_only = True):
+			compress=True, clean_up=True, compress_derivatives_only = True):
+
 		sketching_arrays = self.initialize_sampling(derivatives = derivatives, output_decoder = output_decoder,\
 													output_encoder = output_encoder)
 		Phi = sketching_arrays['Phi']
