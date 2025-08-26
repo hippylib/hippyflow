@@ -131,13 +131,12 @@ class DataGenerator:
 				self.m.zero()
 				if self.settings['reset_initial_guess']:
 					self.u.zero()
-					print('reset init guess')
+					if self.settings['verbose']:
+						print('reset init guess')
 				self.prior.sample(self.noise,self.m)
-				print('sampled m', self.m.get_local())
 
 				if self.control_distribution is not None:
 					self.control_distribution.sample(self.z)
-					print('sampled z', self.z.get_local())
 					x = [self.u,self.m,None,self.z]
 				else:
 					x = [self.u,self.m,None]
@@ -346,11 +345,6 @@ class DataGenerator:
 				JzstarPhi_np = hf.mv_to_dense(JzstarPhi)
 				np.save(data_dir+f'Jz_data/JzstarPhi{i}.npy', JzstarPhi_np)
 
-			# del(self.observable.problem.solver_fwd_inc)
-			# try:
-			# 	del(self.observable.problem.solver_adj_inc)
-			# except:
-			# 	pass
 
 		################################################################################
 		if compress:
